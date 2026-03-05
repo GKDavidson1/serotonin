@@ -1,0 +1,103 @@
+ """
+    Balloon (Windkessel) haemodynamic forward model for BOLD.
+
+    This function integrates the standard “balloon model” state equations to
+    predict a BOLD time series from a neural drive.
+
+    Glossary (signals / state variables)
+    -----------------------------------
+    current : array_like, shape (T,)
+        Input neural activity drive over time (arbitrary units). This is *not*
+        a direct physiological measurement unless you calibrate it.
+    x : float
+        Effective neural drive to the vasodilatory signal, computed each step as:
+        x = neural_gain * current[t].
+    s : float
+        Vasodilatory (flow-inducing) signal / vasoactive state. It is a latent
+        state that rises with x and decays with rate kappa, with feedback from
+        flow via gamma. Units depend on how `current` is scaled, but dynamics are
+        governed by kappa and gamma (≈ 1/s).
+    f : float
+        Normalised cerebral blood inflow (CBF), relative to baseline.
+        f = 1 at rest; f > 1 indicates increased inflow.
+    v : float
+        Normalised venous blood volume, relative to baseline.
+        v = 1 at rest.
+    q : float
+        Normalised deoxyhaemoglobin content in the venous compartment, relative
+        to baseline. q = 1 at rest.
+    bold : float
+        Predicted fractional BOLD signal change relative to baseline
+        (dimensionless, as produced by the model readout).
+
+    Key model parameters (what each one means)
+    ------------------------------------------
+    dt : float
+        External integration timestep [s] between successive elements of `current`.
+    kappa : float
+        Decay rate of the vasodilatory signal s [1/s]. Larger kappa → s decays faster.
+    gamma : float
+        Flow-dependent feedback rate [1/s] coupling (f - 1) back onto s.
+        Larger gamma → stronger/faster autoregulatory damping of flow changes.
+    tau : float
+        Mean transit time of blood through the venous compartment at rest [s].
+        This is the main time constant for *v* and *q* dynamics:
+        - dv/dt scales with 1/tau
+        - dq/dt scales with 1/tau
+        Larger tau → slower venous volume and deoxyhaemoglobin responses.
+    alpha : float
+        Grubb exponent linking venous volume to venous outflow. In this
+        normalised form the outflow term is:
+            v_out = v**(1/alpha)
+        Smaller alpha → more non-linear outflow–volume relationship.
+    E0 : float
+        Resting oxygen extraction fraction (OEF) at baseline (0–1).
+    V0 : float
+        Resting venous blood volume fraction of tissue (0–1). Scales BOLD amplitude.
+    TE : float
+        MR echo time [s]. Scales BOLD sensitivity to susceptibility effects.
+    epsilon : float
+        Weighting of intravascular vs extravascular signal contributions at rest
+        (dimensionless; depends on field strength / sequence assumptions).
+    theta0 : float
+        Frequency-offset / susceptibility scaling constant used in k1 (model constant).
+    r0 : float
+        Relaxation-rate / susceptibility scaling constant used in k2 (model constant).
+    neural_gain : float
+        Scalar gain applied to `current` to produce x. Use this to calibrate the
+        magnitude of the haemodynamic response to your neural input units.
+    method : {"rk4", "euler"}
+        Numerical ODE integrator. "rk4" is more accurate/stable for stiff-ish dynamics.
+    max_step : float
+        Maximum internal substep size [s]. If dt > max_step, the integrator
+        splits dt into smaller substeps for stability.
+
+    Derived quantities (as implemented here)
+    ----------------------------------------
+    oxygen_extraction(f) :
+        Flow-dependent oxygen extraction fraction E(f), implemented as:
+            E(f) = 1 - (1 - E0)**(1/f)
+    v_out :
+        Normalised venous outflow term:
+            v_out = v**(1/alpha)
+    k1, k2, k3 :
+        BOLD readout constants used in:
+            BOLD = V0 * (k1*(1 - q) + k2*(1 - q/v) + k3*(1 - v))
+        with:
+            k1 = 4.3 * theta0 * E0 * TE
+            k2 = epsilon * r0 * E0 * TE
+            k3 = 1 - epsilon
+
+    Returns
+    -------
+    bold : ndarray, shape (T,)
+        Predicted fractional BOLD signal over time.
+    states : dict of ndarray
+        Time series for {"x","s","f","v","q"} stored *before* each dt integration step.
+
+    Notes
+    -----
+    - All haemodynamic states are normalised to baseline: f=v=q=1 at rest.
+    - Intermediate states are clamped to remain positive (f, v, q >= 1e-6)
+      to keep fractional powers and divisions well-defined.
+    """

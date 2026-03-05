@@ -1,0 +1,178 @@
+# scaler = 1 #default
+scaler = 0.5 
+PARAMS = {
+    # local connectivity strengths
+          # local strengths E-->
+          'g_e_self': 0.18 * brian2.nA,
+          'g_e_cross': 0 * brian2.nA,
+          'g_pv_e' : 0.174   * brian2.nA,
+          'g_sst_e_self' : 0.0435   * brian2.nA,
+          'g_sst_e_cross' : 0.0435   * brian2.nA,
+          'g_vip_e' : 0.058   * brian2.nA,
+          # local strengths PV-->
+          'g_e_pv_min': -0.001 * brian2.nA, # dopamine dependent min PV->E strength
+          'g_e_pv_max': -0.4 * brian2.nA, # dopamine dependent max PV->E strength #<------------------------
+          'g_pv_self': -0.18 * brian2.nA,
+          # local strengths SST-->
+          'g_e_sst_min': -0.09 * brian2.nA, # dopamine dependent min SST->E strength #<--------------------------
+          'g_e_sst_max': -0.11 * brian2.nA, # dopamine dependent max SST->E strength
+          'g_pv_sst': -0.17 * brian2.nA,
+          'g_vip_sst': -0.1 * brian2.nA,
+          # local strengths VIP-->
+          'g_sst_vip': -0.05 * brian2.nA,
+
+    # Time constants
+          'tau_nmda': 60 * brian2.ms,
+          'tau_ampa': 2 * brian2.ms,
+          'tau_gaba': 5 * brian2.ms,
+          'tau_gaba_dend': 10 * brian2.ms,
+          'tau_adapt': 0.1   * brian2.second,
+
+    # synaptic rise constants
+          'gamma_nmda': 1.282, # unitless
+          'gamma_gaba': 2,
+          'gamma_ampa': 5,
+
+    # AMPA/(AMPA+NMDA) fraction
+          'ampa_frac_pv': 0.2, # AMPA fraction (1-NMDA fraction) for PV cells
+          'ampa_frac': 0.1,    # AMPA fraction (1-NMDA fraction) for all other cell types
+
+    # Min excitatory gradient (spine count) value
+    #       'e_grad_min': 0.45, #default
+          'e_grad_min': 0.15, #acceptable ranges from 0.1-0.2
+
+
+    # background inputs
+
+          # 'I_background_e': 310 * brian2.pA, #default
+          'I_background_e': (310 * scaler) * brian2.pA,
+          'I_background_i': (300 * scaler) * brian2.pA,
+          # 'I_background_i': 300 * brian2.pA, #default
+          # 'I_background_dend': 30 * brian2.pA, #default
+          'I_background_dend': (30 * scaler) * brian2.pA,
+
+          # 'I_background_e': (310 / 0.85)  * brian2.pA,
+          # 'I_background_i': (300 / 0.85) * brian2.pA,
+          # 'I_background_dend': 30 * brian2.pA,
+
+    # dendrite I/O function parameters
+          'c1': 120 * brian2.pA,
+          'c2': 136.24 * brian2.pA,
+          'c3': 7.0,
+          'c4': 0 * brian2.pA,
+          'c5': 9.64 * brian2.pA,
+          'c6': 20 * brian2.pA,
+
+    # adaptation strengths
+          'g_adapt_e': -0.004 * brian2.nA,
+          'g_adapt_sst': -0.004 * brian2.nA,
+          'g_adapt_vip': -0.004 * brian2.nA,
+
+    # f-I curve parameters - E populations
+          'a_e': 0.135 * brian2.Hz / brian2.pA,
+          'b_e': 54 * brian2.Hz,
+          'd_e': 0.308 * brian2.second,
+
+    # f-I curve parameters - I populations
+          'c_I_sst': 132 * brian2.Hz / brian2.nA,
+          'c_I_vip': 132 * brian2.Hz / brian2.nA,
+          'c_I_pv': 330 * brian2.Hz / brian2.nA,
+          'r_0_sst': -33 * brian2.Hz,
+          'r_0_vip': -33 * brian2.Hz,
+          'r_0_pv': -95 * brian2.Hz,
+
+
+    # rescale FLN parameter
+          'b1': 0.3, #default
+          # 'b1': 0.25,
+
+    # Long-range E targets
+    #       'lr_e_self_dend': 0.9, #concern
+          'lr_e_self_dend': 1.0,
+          # 'lr_e_cross_dend': 0.1,
+
+    # Long-range I targets
+          'lr_pv_e': 0.31,
+          'lr_sst_e_self': 0.22 ,
+          'lr_vip_e_self': 0.47,
+
+    # Long-range I targets in FEF
+          'lr_pv_e_fef': 0.2,
+          'lr_sst_e_self_fef': 0.1 ,
+          'lr_vip_e_self_fef': 0.7,
+
+    # parameters for D1 occupancy
+          'slope_d1occ' : 2,
+          'midpoint_d1occ' : 1,
+
+    # parameters for DA modulation of NMDA
+          'slope_nmda_da' : 10,
+          'midpoint_nmda_da' : 0.35,
+          'g_nmda_da': 0.6,
+
+    # parameters for m current
+          'slope_m' : 14,
+          'midpoint_m' : 0.85,
+          'g_m' : -0.5  * brian2.nA,
+
+
+    # Simulation parameters
+        # initial firing rates
+        #   'r_0_e': 5 * brian2.Hz, #default
+          'r_0_e': 0 * brian2.Hz,
+        # timestep
+          'dt': 0.5 * brian2.ms, #default
+          # 'dt': 5.0 * brian2.ms,
+        # trial length
+
+
+         # target stimulus on time
+          'stim_on': 1 * brian2.second,
+        # target stimulus off time
+        #   'stim_off': 1.4 * brian2.second,
+          'stim_off': 1.4 * brian2.second,
+
+        # target stimulus on time
+        #   'stim_on': 0.1 * brian2.second,
+        # # target stimulus off time
+        #   'stim_off': 0.4 * brian2.second,
+        #
+        #   'stim_on2': 0.8 * brian2.second,
+        # # target stimulus off time
+        #   'stim_off2': 1.1 * brian2.second,
+        #
+        #   'stim_on3': 1.5 * brian2.second,
+        # # target stimulus off time
+        #   'stim_off3': 1.8 * brian2.second,
+
+        # distractor stimulus on time (if using)
+          'distract_on': 2 * brian2.second,
+        # distractor stimulus off time (if using)
+          'distract_off': 2.4 * brian2.second,
+
+
+    # stimulus strength
+    #       'stim_strength': 0.1 * brian2.nA, #default
+          'stim_strength': 0.0 * brian2.nA,
+
+
+    # dopamine release level for the current simulation
+    #     'da_rel': 1.5, #default
+          'da_rel': 0.5,
+
+          'std_noise': 4 * brian2.pA,
+          # 'std_noise': 0.0 * brian2.pA,
+
+          'trial_length': 7 * brian2.second,
+        # Long-range connectivity strengths
+              'mu_ee': 1.45, #default
+              # 'mu_ie': 2.24, #default
+          # 'mu_ee': 1.5,
+          'mu_ie': 1.8
+
+
+
+}
+
+with open('large_scale_visualWM_DA_params.pck', 'wb') as f:
+    pickle.dump(PARAMS, f)
