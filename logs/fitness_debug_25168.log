@@ -1,0 +1,150 @@
+2026-03-16 11:53:21,214 pid=25168 ============== DEBUG FITNESS ==============
+2026-03-16 11:53:21,214 pid=25168 stim_e1_v2               = 0.377 Hz
+2026-03-16 11:53:21,214 pid=25168 mean_offstim_e1_v2       = 0.365 Hz
+2026-03-16 11:53:21,214 pid=25168 persistent_e1_46         = 0.383 Hz
+2026-03-16 11:53:21,214 pid=25168 mean_pre_e1_46           = 0.383 Hz
+2026-03-16 11:53:21,214 pid=25168 e2_metric (anywhere, any t)= 0.000 Hz
+2026-03-16 11:53:21,215 pid=25168 --- penalties ---
+2026-03-16 11:53:21,215 pid=25168 penalty_e1_v2_high_during_stim = 2.633
+2026-03-16 11:53:21,215 pid=25168 penalty_e1_v2_low_outside_stim = 0.000
+2026-03-16 11:53:21,215 pid=25168 penalty_e1_v2_total            = 2.633
+2026-03-16 11:53:21,216 pid=25168 penalty_e1_46_high_persistent  = 92.496
+2026-03-16 11:53:21,216 pid=25168 penalty_e1_46_low_before_stim  = 0.000
+2026-03-16 11:53:21,216 pid=25168 penalty_e1_46_total            = 92.496
+2026-03-16 11:53:21,216 pid=25168 penalty_e2                     = 0.000
+2026-03-16 11:53:21,216 pid=25168 total_penalty_stim             = 95.129
+2026-03-16 11:53:21,216 pid=25168 ---- SHAPE THE PATTERN ----
+2026-03-16 11:53:21,216 pid=25168 v2_delta                   = 0.013 Hz
+2026-03-16 11:53:21,216 pid=25168 a46_delta                  = -0.000 Hz
+2026-03-16 11:53:21,216 pid=25168 bif_term                   = 0.732 Hz
+2026-03-16 11:53:21,216 pid=25168 --- pattern penalties ---
+2026-03-16 11:53:21,216 pid=25168 penalty_v2_no_transient           = 2.718
+2026-03-16 11:53:21,216 pid=25168 penalty_46_no_persistence         = 2.814
+2026-03-16 11:53:21,216 pid=25168 penalty_no_bifurcation_pattern    = 1.072
+2026-03-16 11:53:21,216 pid=25168 TOTAL PENALTY (stim+base) = 101.733
+2026-03-16 11:53:21,216 pid=25168 ===========================================
+2026-03-16 11:53:35,551 pid=25168 ============== DEBUG FITNESS ==============
+2026-03-16 11:53:35,551 pid=25168 stim_e1_v2               = 0.614 Hz
+2026-03-16 11:53:35,551 pid=25168 mean_offstim_e1_v2       = 0.618 Hz
+2026-03-16 11:53:35,551 pid=25168 persistent_e1_46         = 0.662 Hz
+2026-03-16 11:53:35,551 pid=25168 mean_pre_e1_46           = 0.672 Hz
+2026-03-16 11:53:35,551 pid=25168 e2_metric (anywhere, any t)= 0.000 Hz
+2026-03-16 11:53:35,551 pid=25168 --- penalties ---
+2026-03-16 11:53:35,551 pid=25168 penalty_e1_v2_high_during_stim = 1.920
+2026-03-16 11:53:35,551 pid=25168 penalty_e1_v2_low_outside_stim = 0.000
+2026-03-16 11:53:35,551 pid=25168 penalty_e1_v2_total            = 1.920
+2026-03-16 11:53:35,551 pid=25168 penalty_e1_46_high_persistent  = 87.204
+2026-03-16 11:53:35,551 pid=25168 penalty_e1_46_low_before_stim  = 0.000
+2026-03-16 11:53:35,551 pid=25168 penalty_e1_46_total            = 87.204
+2026-03-16 11:53:35,551 pid=25168 penalty_e2                     = 0.000
+2026-03-16 11:53:35,551 pid=25168 total_penalty_stim             = 89.124
+2026-03-16 11:53:35,551 pid=25168 ---- SHAPE THE PATTERN ----
+2026-03-16 11:53:35,551 pid=25168 v2_delta                   = -0.003 Hz
+2026-03-16 11:53:35,551 pid=25168 a46_delta                  = -0.010 Hz
+2026-03-16 11:53:35,552 pid=25168 bif_term                   = 0.706 Hz
+2026-03-16 11:53:35,552 pid=25168 --- pattern penalties ---
+2026-03-16 11:53:35,552 pid=25168 penalty_v2_no_transient           = 2.838
+2026-03-16 11:53:35,552 pid=25168 penalty_46_no_persistence         = 2.890
+2026-03-16 11:53:35,552 pid=25168 penalty_no_bifurcation_pattern    = 0.997
+2026-03-16 11:53:35,552 pid=25168 TOTAL PENALTY (stim+base) = 95.849
+2026-03-16 11:53:35,553 pid=25168 ===========================================
+2026-03-16 11:53:46,620 pid=25168 ============== DEBUG FITNESS ==============
+2026-03-16 11:53:46,620 pid=25168 stim_e1_v2               = 1.478 Hz
+2026-03-16 11:53:46,621 pid=25168 mean_offstim_e1_v2       = 1.517 Hz
+2026-03-16 11:53:46,621 pid=25168 persistent_e1_46         = 11.220 Hz
+2026-03-16 11:53:46,621 pid=25168 mean_pre_e1_46           = 10.930 Hz
+2026-03-16 11:53:46,621 pid=25168 e2_metric (anywhere, any t)= 0.000 Hz
+2026-03-16 11:53:46,621 pid=25168 --- penalties ---
+2026-03-16 11:53:46,621 pid=25168 penalty_e1_v2_high_during_stim = 0.272
+2026-03-16 11:53:46,621 pid=25168 penalty_e1_v2_low_outside_stim = 0.517
+2026-03-16 11:53:46,621 pid=25168 penalty_e1_v2_total            = 0.789
+2026-03-16 11:53:46,621 pid=25168 penalty_e1_46_high_persistent  = 0.000
+2026-03-16 11:53:46,621 pid=25168 penalty_e1_46_low_before_stim  = 9.930
+2026-03-16 11:53:46,621 pid=25168 penalty_e1_46_total            = 9.930
+2026-03-16 11:53:46,621 pid=25168 penalty_e2                     = 0.000
+2026-03-16 11:53:46,621 pid=25168 total_penalty_stim             = 10.719
+2026-03-16 11:53:46,621 pid=25168 ---- SHAPE THE PATTERN ----
+2026-03-16 11:53:46,621 pid=25168 v2_delta                   = -0.038 Hz
+2026-03-16 11:53:46,621 pid=25168 a46_delta                  = 0.289 Hz
+2026-03-16 11:53:46,621 pid=25168 bif_term                   = -8.953 Hz
+2026-03-16 11:53:46,621 pid=25168 --- pattern penalties ---
+2026-03-16 11:53:46,621 pid=25168 penalty_v2_no_transient           = 3.107
+2026-03-16 11:53:46,621 pid=25168 penalty_46_no_persistence         = 1.062
+2026-03-16 11:53:46,621 pid=25168 penalty_no_bifurcation_pattern    = 0.000
+2026-03-16 11:53:46,621 pid=25168 TOTAL PENALTY (stim+base) = 14.888
+2026-03-16 11:53:46,621 pid=25168 ===========================================
+2026-03-16 11:54:10,895 pid=25168 ============== DEBUG FITNESS ==============
+2026-03-16 11:54:10,895 pid=25168 stim_e1_v2               = 0.402 Hz
+2026-03-16 11:54:10,895 pid=25168 mean_offstim_e1_v2       = 0.405 Hz
+2026-03-16 11:54:10,895 pid=25168 persistent_e1_46         = 0.439 Hz
+2026-03-16 11:54:10,895 pid=25168 mean_pre_e1_46           = 0.439 Hz
+2026-03-16 11:54:10,895 pid=25168 e2_metric (anywhere, any t)= 0.000 Hz
+2026-03-16 11:54:10,895 pid=25168 --- penalties ---
+2026-03-16 11:54:10,895 pid=25168 penalty_e1_v2_high_during_stim = 2.554
+2026-03-16 11:54:10,895 pid=25168 penalty_e1_v2_low_outside_stim = 0.000
+2026-03-16 11:54:10,895 pid=25168 penalty_e1_v2_total            = 2.554
+2026-03-16 11:54:10,895 pid=25168 penalty_e1_46_high_persistent  = 91.411
+2026-03-16 11:54:10,895 pid=25168 penalty_e1_46_low_before_stim  = 0.000
+2026-03-16 11:54:10,895 pid=25168 penalty_e1_46_total            = 91.411
+2026-03-16 11:54:10,895 pid=25168 penalty_e2                     = 0.000
+2026-03-16 11:54:10,895 pid=25168 total_penalty_stim             = 93.965
+2026-03-16 11:54:10,895 pid=25168 ---- SHAPE THE PATTERN ----
+2026-03-16 11:54:10,895 pid=25168 v2_delta                   = -0.003 Hz
+2026-03-16 11:54:10,895 pid=25168 a46_delta                  = 0.000 Hz
+2026-03-16 11:54:10,895 pid=25168 bif_term                   = 0.716 Hz
+2026-03-16 11:54:10,895 pid=25168 --- pattern penalties ---
+2026-03-16 11:54:10,895 pid=25168 penalty_v2_no_transient           = 2.837
+2026-03-16 11:54:10,895 pid=25168 penalty_46_no_persistence         = 2.812
+2026-03-16 11:54:10,895 pid=25168 penalty_no_bifurcation_pattern    = 1.026
+2026-03-16 11:54:10,895 pid=25168 TOTAL PENALTY (stim+base) = 100.640
+2026-03-16 11:54:10,895 pid=25168 ===========================================
+2026-03-16 11:54:26,228 pid=25168 ============== DEBUG FITNESS ==============
+2026-03-16 11:54:26,228 pid=25168 stim_e1_v2               = 0.483 Hz
+2026-03-16 11:54:26,229 pid=25168 mean_offstim_e1_v2       = 0.489 Hz
+2026-03-16 11:54:26,229 pid=25168 persistent_e1_46         = 18.820 Hz
+2026-03-16 11:54:26,229 pid=25168 mean_pre_e1_46           = 18.655 Hz
+2026-03-16 11:54:26,229 pid=25168 e2_metric (anywhere, any t)= 0.000 Hz
+2026-03-16 11:54:26,229 pid=25168 --- penalties ---
+2026-03-16 11:54:26,229 pid=25168 penalty_e1_v2_high_during_stim = 2.301
+2026-03-16 11:54:26,229 pid=25168 penalty_e1_v2_low_outside_stim = 0.000
+2026-03-16 11:54:26,229 pid=25168 penalty_e1_v2_total            = 2.301
+2026-03-16 11:54:26,229 pid=25168 penalty_e1_46_high_persistent  = 0.000
+2026-03-16 11:54:26,229 pid=25168 penalty_e1_46_low_before_stim  = 17.655
+2026-03-16 11:54:26,229 pid=25168 penalty_e1_46_total            = 17.655
+2026-03-16 11:54:26,229 pid=25168 penalty_e2                     = 0.000
+2026-03-16 11:54:26,229 pid=25168 total_penalty_stim             = 19.956
+2026-03-16 11:54:26,229 pid=25168 ---- SHAPE THE PATTERN ----
+2026-03-16 11:54:26,229 pid=25168 v2_delta                   = -0.006 Hz
+2026-03-16 11:54:26,229 pid=25168 a46_delta                  = 0.165 Hz
+2026-03-16 11:54:26,229 pid=25168 bif_term                   = -17.581 Hz
+2026-03-16 11:54:26,229 pid=25168 --- pattern penalties ---
+2026-03-16 11:54:26,229 pid=25168 penalty_v2_no_transient           = 2.859
+2026-03-16 11:54:26,229 pid=25168 penalty_46_no_persistence         = 1.708
+2026-03-16 11:54:26,229 pid=25168 penalty_no_bifurcation_pattern    = 0.000
+2026-03-16 11:54:26,229 pid=25168 TOTAL PENALTY (stim+base) = 24.523
+2026-03-16 11:54:26,229 pid=25168 ===========================================
+2026-03-16 11:54:46,043 pid=25168 ============== DEBUG FITNESS ==============
+2026-03-16 11:54:46,044 pid=25168 stim_e1_v2               = 0.651 Hz
+2026-03-16 11:54:46,044 pid=25168 mean_offstim_e1_v2       = 0.658 Hz
+2026-03-16 11:54:46,044 pid=25168 persistent_e1_46         = 5.257 Hz
+2026-03-16 11:54:46,044 pid=25168 mean_pre_e1_46           = 6.491 Hz
+2026-03-16 11:54:46,044 pid=25168 e2_metric (anywhere, any t)= 0.000 Hz
+2026-03-16 11:54:46,044 pid=25168 --- penalties ---
+2026-03-16 11:54:46,044 pid=25168 penalty_e1_v2_high_during_stim = 1.821
+2026-03-16 11:54:46,044 pid=25168 penalty_e1_v2_low_outside_stim = 0.000
+2026-03-16 11:54:46,044 pid=25168 penalty_e1_v2_total            = 1.821
+2026-03-16 11:54:46,044 pid=25168 penalty_e1_46_high_persistent  = 22.492
+2026-03-16 11:54:46,044 pid=25168 penalty_e1_46_low_before_stim  = 5.491
+2026-03-16 11:54:46,044 pid=25168 penalty_e1_46_total            = 27.983
+2026-03-16 11:54:46,044 pid=25168 penalty_e2                     = 0.000
+2026-03-16 11:54:46,044 pid=25168 total_penalty_stim             = 29.804
+2026-03-16 11:54:46,044 pid=25168 ---- SHAPE THE PATTERN ----
+2026-03-16 11:54:46,044 pid=25168 v2_delta                   = -0.007 Hz
+2026-03-16 11:54:46,044 pid=25168 a46_delta                  = -1.233 Hz
+2026-03-16 11:54:46,044 pid=25168 bif_term                   = -3.850 Hz
+2026-03-16 11:54:46,044 pid=25168 --- pattern penalties ---
+2026-03-16 11:54:46,044 pid=25168 penalty_v2_no_transient           = 2.865
+2026-03-16 11:54:46,044 pid=25168 penalty_46_no_persistence         = 19.668
+2026-03-16 11:54:46,044 pid=25168 penalty_no_bifurcation_pattern    = 0.000
+2026-03-16 11:54:46,044 pid=25168 TOTAL PENALTY (stim+base) = 52.337
+2026-03-16 11:54:46,044 pid=25168 ===========================================

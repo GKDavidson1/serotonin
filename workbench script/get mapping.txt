@@ -1,0 +1,27 @@
+cat > resample_notes.txt << 'EOF'
+Source label:
+subgraph_lyon_40_areas.label.gii
+
+Source sphere:
+MacaqueYerkes19_v1.2.L.sphere.32k_fs_LR.surf.gii
+
+Target sphere:
+F99.L.sphere.regMY19.native.surf.gii
+
+Source area surface:
+MacaqueYerkes19_v1.2.L.midthickness.32k_fs_LR.surf.gii
+
+Target area surface:
+F99.L.midthickness.native.surf.gii
+
+Command:
+wb_command -label-resample \
+  subgraph_lyon_40_areas.label.gii \
+  MacaqueYerkes19_v1.2.L.sphere.32k_fs_LR.surf.gii \
+  F99.L.sphere.regMY19.native.surf.gii \
+  ADAP_BARY_AREA \
+  subgraph_lyon_40_areas.F99.L.label.gii \
+  -area-surfs \
+  MacaqueYerkes19_v1.2.L.midthickness.32k_fs_LR.surf.gii \
+  F99.L.midthickness.native.surf.gii
+EOF
