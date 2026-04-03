@@ -4,12 +4,14 @@ import argparse
 import json
 import multiprocessing as mp
 import pickle
+import time
 from pathlib import Path
 
 import numpy as np
 import numpy.matlib
 
 # %matplotlib inline
+import matplotlib.pyplot as plt
 import pandas
 import scipy.io as sio
 import brian2
@@ -21,9 +23,8 @@ try:
 except ImportError:  # pragma: no cover - handled when optimisation is invoked
     cma = None
 
-np.random.seed(1234)
-
 _ANATOMY_CACHE = None
+_FC_TARGET_CACHE = {}
 
 
 PARAMS = {
@@ -157,7 +158,7 @@ PARAMS = {
           # 'I_background_i': 180 * brian2.pA,
           'I_background_dend': 30 * brian2.pA, #default
 
-          'tau_noise': 2 * 8 * brian2.ms, #NEW TESTING
+          # 'tau_noise': 2 * 8 * brian2.ms,
 
     # stimulus strength
     #       'stim_strength': 0.1 * brian2.nA, #default
@@ -171,7 +172,7 @@ PARAMS = {
           'std_noise': 8 * brian2.pA,
           # 'std_noise': 0.0 * brian2.pA,
 
-          'trial_length': 5 * brian2.second,
+          'trial_length': 15 * brian2.second,
         # Long-range connectivity strengths
         #   'mu_ee': 1.45, #default
             'mu_ee': 1.55,
@@ -442,76 +443,50 @@ def prepare_connectivity(parameters,spine_count_raw,fln,sln,d1_density_raw):
 
 
 
-def initialise_variables(PARAMS,num_areas,num_pops,num_e_pops,area_list_SLN,pops):
+def initialise_simulation_state(PARAMS, num_areas, num_pops, area_list_SLN, pops, *, rng=None):
 
-    # Initialise
-    num_iterations = int(PARAMS['trial_length']/PARAMS['dt'])
+    if rng is None:
+        rng = np.random.default_rng()
 
-    # Choose initial values for rates and synapse variables
-    R0 = np.matlib.repmat(np.array([PARAMS['r_0_e'],0,PARAMS['r_0_e'],PARAMS['r_0_e'],PARAMS['r_0_e']]), num_areas, 1) * brian2.Hz
-    R = np.zeros((num_iterations,num_areas,num_pops)) * brian2.Hz
-    R[0,:,:] = R0
+    num_iterations = int(PARAMS['trial_length'] / PARAMS['dt'])
 
-    s_nmda = np.zeros((num_iterations,num_areas,num_pops))
-    s_ampa = np.zeros((num_iterations,num_areas,num_pops))
-    s_gaba = np.zeros((num_iterations,num_areas,num_pops))
-    s_gaba_dend = np.zeros((num_iterations,num_areas,num_pops))
-    s_gaba_dend[0,:,:] = 1
-    s_gaba[0,:,:] = 1
-    s_adapt = np.zeros((num_iterations,num_areas,num_pops))
+    R = np.matlib.repmat(
+        np.array([PARAMS['r_0_e'], 0, PARAMS['r_0_e'], PARAMS['r_0_e'], PARAMS['r_0_e']]),
+        num_areas,
+        1,
+    ) * brian2.Hz
+    s_nmda = np.zeros((num_areas, num_pops))
+    s_ampa = np.zeros((num_areas, num_pops))
+    s_gaba = np.ones((num_areas, num_pops))
+    s_gaba_dend = np.ones((num_areas, num_pops))
+    s_adapt = np.zeros((num_areas, num_pops))
 
-    # # Preassign external inputs
-    I_ext    = np.zeros((num_iterations,num_areas,num_pops)) * brian2.amp
+    I_0 = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_0[:, [pops.index('E1soma')]] = PARAMS['I_background_e']
+    I_0[:, [pops.index('E1dend')]] = PARAMS['I_background_dend']
+    I_0[:, [pops.index('PV'), pops.index('SST1'), pops.index('VIP1')]] = PARAMS['I_background_i']
 
-    # Let's apply external stimulation to V1 populations E1 & E2
-    I_ext[int(PARAMS['stim_on']/PARAMS['dt']):int(PARAMS['stim_off']/PARAMS['dt']),area_list_SLN.index('V1'),pops.index('E1dend')] = PARAMS['stim_strength']
-    # I_ext[int(PARAMS['stim_on']/PARAMS['dt']):int(PARAMS['stim_off']/PARAMS['dt']),area_list_SLN.index('32'),pops.index('E1dend')] = PARAMS['stim_strength']
+    eta = rng.normal(loc=0.0, scale=1.0, size=(num_iterations, num_areas, num_pops))
+    noise_rhs = eta * PARAMS["std_noise"] * np.sqrt(2.0 * PARAMS["dt"] / PARAMS["tau_ampa"])
+    noise_rhs[:, :, 1:2] = 0
+    I_noise = np.zeros((num_areas, num_pops)) * brian2.pA
 
-
-    # I_ext[int(PARAMS['stim_on2']/PARAMS['dt']):int(PARAMS['stim_off2']/PARAMS['dt']),area_list_SLN.index('V1'),pops.index('E1dend')] = PARAMS['stim_strength']
-    # I_ext[int(PARAMS['stim_on3']/PARAMS['dt']):int(PARAMS['stim_off3']/PARAMS['dt']),area_list_SLN.index('V1'),pops.index('E1dend')] = PARAMS['stim_strength']
-
-    # No distractor
-#     I_ext[int(PARAMS['distract_on']/PARAMS['dt']):int(PARAMS['distract_off']/PARAMS['dt']),area_list_SLN.index('V1'),pops.index('E2dend')] = PARAMS['stim_strength']
-
-    # Create matrices in which we can store the currents
-    I_lr_nmda    =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_lr_ampa    =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_local_nmda =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_local_ampa =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_local_gaba =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_soma_dend  =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_total      =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_total_abs  =  np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-    I_exc_dend   = np.zeros((num_iterations,num_areas,num_e_pops)) * brian2.pA
-    I_inh_dend   = np.zeros((num_iterations,num_areas,num_e_pops)) * brian2.pA
-    I_local_gaba_dend =  np.zeros((num_iterations,num_areas,num_e_pops)) * brian2.pA
-    I_adapt = np.zeros((num_iterations,num_areas,num_pops)) * brian2.pA
-
-    # Define background inputs
-    I_0 = np.zeros((num_areas,num_pops)) * brian2.pA
-    I_0[:,[pops.index('E1soma')]] = PARAMS['I_background_e']
-    I_0[:,[pops.index('E1dend')]] = PARAMS['I_background_dend']
-    I_0[:,[pops.index('PV'),pops.index('SST1'),pops.index('VIP1')]] = PARAMS['I_background_i']
-
-    # Let's set up the noise. We will model the noise as an Ornstein-Uhlenbeck process.
-    # Gaussian noise. mean 0, std 1. Dims: timesteps, local populations, areas
-    eta = np.random.normal(loc=0.0, scale=1.0, size=(num_iterations,num_areas,num_pops))
-    # eta[:,:,1:] = 0 #remove noise from non-soma                                 # NEW LINE
-
-    # prepare the right hand side of the above equation
-    # noise_rhs = eta*((np.sqrt(PARAMS['tau_ampa']*np.power(PARAMS['std_noise'],2))*np.sqrt(PARAMS['dt']))/PARAMS['tau_ampa'])
-    noise_rhs = eta * PARAMS["std_noise"] * np.sqrt(2.0 * PARAMS["dt"] / PARAMS["tau_ampa"]) #NEW LINE
-    # noise_rhs = eta * PARAMS["std_noise"] * np.sqrt(2.0 * PARAMS["dt"] / PARAMS["tau_noise"]) #NEW LINE
-
-    noise_rhs[:,:,1:2] = 0 # remove noise from dendrites
-    # noise_rhs[:,1:,:] = 0 # remove noise from everywhere but v1                    # NEW LINE
-    I_noise = np.zeros((num_areas , num_pops )) *brian2.pA
-
-    return(num_iterations,R,s_nmda,s_ampa,s_gaba,s_gaba_dend,s_adapt
-           ,I_ext,I_lr_nmda,I_lr_ampa,I_local_nmda,I_local_ampa,I_local_gaba
-           ,I_soma_dend,I_total,I_exc_dend,I_inh_dend,I_local_gaba_dend,I_adapt
-           ,I_0,I_noise,noise_rhs,I_total_abs)
+    return {
+        'num_iterations': num_iterations,
+        'R': R,
+        's_nmda': s_nmda,
+        's_ampa': s_ampa,
+        's_gaba': s_gaba,
+        's_gaba_dend': s_gaba_dend,
+        's_adapt': s_adapt,
+        'I_0': I_0,
+        'I_noise': I_noise,
+        'noise_rhs': noise_rhs,
+        'stim_start_idx': int(PARAMS['stim_on'] / PARAMS['dt']),
+        'stim_end_idx': int(PARAMS['stim_off'] / PARAMS['dt']),
+        'stim_area_idx': area_list_SLN.index('V1'),
+        'stim_pop_idx': pops.index('E1dend'),
+    }
         
 
 
@@ -519,99 +494,167 @@ def initialise_variables(PARAMS,num_areas,num_pops,num_e_pops,area_list_SLN,pops
 
 
 
-def large_scale_da_model(pops, num_pops, num_e_pops, num_areas, e_grad, g_adapt, g_m, ampa_frac, nmda_frac,
-                         J_nmda, J_ampa, J_gaba, J_gaba_dend, W_superficial, W_deep, lr_targets,
-                         nmda_da_grad, e_pv_da_mat, e_sst_da_mat, m_da_grad, num_iterations, R, s_nmda,
-                         s_ampa, s_gaba, s_gaba_dend, s_adapt,
-                         I_ext, I_lr_nmda, I_lr_ampa, I_local_nmda, I_local_ampa, I_local_gaba,
-                         I_soma_dend, I_total, I_exc_dend, I_inh_dend, I_local_gaba_dend, I_adapt,
-                         I_0, I_noise, noise_rhs, parameters, lr_targets_FEF, I_total_abs, area_list_SLN):
+def large_scale_da_model(
+    pops,
+    num_pops,
+    num_areas,
+    e_grad,
+    g_adapt,
+    g_m,
+    ampa_frac,
+    nmda_frac,
+    J_nmda,
+    J_ampa,
+    J_gaba,
+    J_gaba_dend,
+    W_superficial,
+    W_deep,
+    lr_targets,
+    nmda_da_grad,
+    e_pv_da_mat,
+    e_sst_da_mat,
+    m_da_grad,
+    state,
+    parameters,
+    lr_targets_FEF,
+    area_list_SLN,
+):
 
-    # noise_delay = 8
+    num_iterations = state['num_iterations']
+    R = state['R']
+    s_nmda = state['s_nmda']
+    s_ampa = state['s_ampa']
+    s_gaba = state['s_gaba']
+    s_gaba_dend = state['s_gaba_dend']
+    s_adapt = state['s_adapt']
+    I_0 = state['I_0']
+    I_noise = state['I_noise']
+    noise_rhs = state['noise_rhs']
+    stim_start_idx = state['stim_start_idx']
+    stim_end_idx = state['stim_end_idx']
+    stim_area_idx = state['stim_area_idx']
+    stim_pop_idx = state['stim_pop_idx']
+
     fef_idx = [area_list_SLN.index('8m'), area_list_SLN.index('8l')]
-    for i_t in range(1,num_iterations):
+    area_drive_abs = np.zeros((num_iterations, num_areas)) * brian2.pA
 
-        # update noise - dims = num local pops x num areas
-        I_noise = I_noise + -I_noise*(parameters['dt']/(parameters['tau_ampa'])) + noise_rhs[i_t-1,:,:]
-        # I_noise = I_noise + -I_noise*(parameters['dt']/(parameters['tau_noise'])) + noise_rhs[i_t-1,:,:] #NEW LINE
+    I_lr_nmda = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_lr_ampa = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_local_nmda = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_local_ampa = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_local_gaba = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_soma_dend = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_exc_dend = np.zeros((num_areas, 1)) * brian2.pA
+    I_inh_dend = np.zeros((num_areas, 1)) * brian2.pA
+    I_local_gaba_dend = np.zeros((num_areas, 1)) * brian2.pA
+    I_adapt = np.zeros((num_areas, num_pops)) * brian2.pA
+    I_total = np.zeros((num_areas, num_pops)) * brian2.pA
+    R_next = np.zeros_like(R)
 
-        # Long range NMDA to E populations
-        I_lr_nmda[i_t-1,:,:2]   = ((e_grad*parameters['mu_ee']*nmda_da_grad)*W_superficial).dot(s_nmda[i_t-1,:,:1]).dot(nmda_frac[:2]*lr_targets[:2,:].T)
-        # Long range NMDA to I populations 
-        I_lr_nmda[i_t-1,:,2:]   = parameters['mu_ie']*e_grad*nmda_da_grad*(W_deep.dot(s_nmda[i_t-1,:,:1])).dot(nmda_frac[2:]*lr_targets[2:,:].T)
-        # Long range NMDA to I populations in FEF
-        I_lr_nmda[i_t-1,fef_idx,2:]   = parameters['mu_ie']*e_grad[fef_idx]*nmda_da_grad[fef_idx]*(W_deep[fef_idx,:].dot(s_nmda[i_t-1,:,:1])).dot(nmda_frac[2:]*lr_targets_FEF[2:,:].T)
+    dt = parameters['dt']
+    tau_ampa = parameters['tau_ampa']
+    stim_strength = parameters['stim_strength']
 
-        
-        # Long range AMPA to E populations 
-        I_lr_ampa[i_t-1,:,:2]   = ((e_grad*parameters['mu_ee'])*W_superficial).dot(s_ampa[i_t-1,:,:1]).dot(ampa_frac[:2]*lr_targets[:2,:].T)
-        # Long range AMPA to I populations 
-        I_lr_ampa[i_t-1,:,2:]   = parameters['mu_ie']*e_grad*(W_deep.dot(s_ampa[i_t-1,:,:1])).dot(ampa_frac[2:]*lr_targets[2:,:].T)
-        # Long range AMPA to I populations in FEF
-        I_lr_ampa[i_t-1,fef_idx,2:]   = parameters['mu_ie']*e_grad[fef_idx]*(W_deep[fef_idx,:].dot(s_ampa[i_t-1,:,:1])).dot(ampa_frac[2:]*lr_targets_FEF[2:,:].T)
+    for step in range(num_iterations):
 
-        
-        # local NMDA
-        I_local_nmda[i_t-1,:,:] = nmda_frac*nmda_da_grad*e_grad*J_nmda.dot(s_nmda[i_t-1,:,:].T).T
+        I_noise = I_noise + -I_noise * (dt / tau_ampa) + noise_rhs[step, :, :]
 
-        # local AMPA
-        I_local_ampa[i_t-1,:,:] = ampa_frac*e_grad*J_ampa.dot(s_ampa[i_t-1,:,:].T).T
+        I_lr_nmda[:, :] = 0 * brian2.pA
+        I_lr_nmda[:, :2] = ((e_grad * parameters['mu_ee'] * nmda_da_grad) * W_superficial).dot(s_nmda[:, :1]).dot(
+            nmda_frac[:2] * lr_targets[:2, :].T
+        )
+        I_lr_nmda[:, 2:] = parameters['mu_ie'] * e_grad * nmda_da_grad * (W_deep.dot(s_nmda[:, :1])).dot(
+            nmda_frac[2:] * lr_targets[2:, :].T
+        )
+        I_lr_nmda[fef_idx, 2:] = (
+            parameters['mu_ie']
+            * e_grad[fef_idx]
+            * nmda_da_grad[fef_idx]
+            * (W_deep[fef_idx, :].dot(s_nmda[:, :1])).dot(nmda_frac[2:] * lr_targets_FEF[2:, :].T)
+        )
 
-        # sum up all the local GABA current onto E and I cell somas
+        I_lr_ampa[:, :] = 0 * brian2.pA
+        I_lr_ampa[:, :2] = ((e_grad * parameters['mu_ee']) * W_superficial).dot(s_ampa[:, :1]).dot(
+            ampa_frac[:2] * lr_targets[:2, :].T
+        )
+        I_lr_ampa[:, 2:] = parameters['mu_ie'] * e_grad * (W_deep.dot(s_ampa[:, :1])).dot(
+            ampa_frac[2:] * lr_targets[2:, :].T
+        )
+        I_lr_ampa[fef_idx, 2:] = (
+            parameters['mu_ie']
+            * e_grad[fef_idx]
+            * (W_deep[fef_idx, :].dot(s_ampa[:, :1])).dot(ampa_frac[2:] * lr_targets_FEF[2:, :].T)
+        )
 
-        I_local_gaba[i_t-1,:,:] = e_pv_da_mat*(J_gaba.dot(s_gaba[i_t-1,:,:].T).T)
+        I_local_nmda[:, :] = nmda_frac * nmda_da_grad * e_grad * J_nmda.dot(s_nmda.T).T
+        I_local_ampa[:, :] = ampa_frac * e_grad * J_ampa.dot(s_ampa.T).T
+        I_local_gaba[:, :] = e_pv_da_mat * (J_gaba.dot(s_gaba.T).T)
+        I_local_gaba_dend[:, :] = e_sst_da_mat * (J_gaba_dend.dot(s_gaba_dend.T).T)
 
-        # sum up all the local GABA current onto dendrites
-        I_local_gaba_dend[i_t-1,:,:] = e_sst_da_mat*(J_gaba_dend.dot(s_gaba_dend[i_t-1,:,:].T).T)
+        I_exc_dend[:, :] = (
+            I_local_nmda[:, 1:2]
+            + I_lr_nmda[:, 1:2]
+            + I_local_ampa[:, 1:2]
+            + I_lr_ampa[:, 1:2]
+            + I_0[:, 1:2]
+            + I_noise[:, 1:2]
+        )
+        if stim_start_idx <= step < stim_end_idx:
+            I_exc_dend[stim_area_idx, 0] += stim_strength
 
-        # calculate the dendrite-to-soma current
-        I_exc_dend[i_t-1,:,:] = I_local_nmda[i_t-1,:,1:2] + I_lr_nmda[i_t-1,:,1:2] + I_local_ampa[i_t-1,:,1:2] + I_lr_ampa[i_t-1,:,1:2] +I_0[:,1:2] + I_ext[i_t-1,:,1:2] + I_noise[:,1:2] #Noise term is always 0 here
+        I_inh_dend[:, :] = I_local_gaba_dend
+        I_soma_dend[:, :] = 0 * brian2.pA
+        I_soma_dend[:, :1] = dendrite_input_output(I_exc_dend, I_inh_dend, parameters)
+        I_adapt[:, :] = (g_adapt + g_m * m_da_grad) * s_adapt
 
-        I_inh_dend[i_t-1,:,:] = I_local_gaba_dend[i_t-1,:,:] 
+        I_total[:, :] = (
+            I_local_nmda
+            + I_local_ampa
+            + I_local_gaba
+            + I_0
+            + I_noise
+            + I_lr_nmda
+            + I_lr_ampa
+            + I_soma_dend
+            + I_adapt
+        )
+        if stim_start_idx <= step < stim_end_idx:
+            I_total[stim_area_idx, stim_pop_idx] += stim_strength
 
-        I_soma_dend[i_t-1,:,:1]  = dendrite_input_output(I_exc_dend[i_t-1,:,:],I_inh_dend[i_t-1,:,:],parameters)
+        area_drive_abs[step, :] = (
+            abs(I_local_nmda)
+            + abs(I_local_ampa)
+            + abs(I_local_gaba)
+            + abs(I_0)
+            + abs(I_noise)
+            + abs(I_lr_nmda)
+            + abs(I_lr_ampa)
+            + abs(I_soma_dend)
+            + abs(I_adapt)
+        ).sum(axis=1)
+        if stim_start_idx <= step < stim_end_idx:
+            area_drive_abs[step, stim_area_idx] += abs(stim_strength)
 
-        # adaptation current
-        I_adapt[i_t-1,:,:] = (g_adapt+g_m*m_da_grad)*s_adapt[i_t-1,:,:]
+        if step == num_iterations - 1:
+            break
 
-        # Define total input current as sum of local NMDA & GABA inputs, with background and external currents, 
-        # noise and long-range NMDA inputs, and an adaptation current
-        I_total[i_t-1,:,:] = I_local_nmda[i_t-1,:,:] + I_local_ampa[i_t-1,:,:] +  I_local_gaba[i_t-1,:,:] + I_0 + I_ext[i_t-1,:,:] + I_noise + I_lr_nmda[i_t-1,:,:] + I_lr_ampa[i_t-1,:,:] + I_soma_dend[i_t-1,:,:] + I_adapt[i_t-1,:,:]
+        R_next[:, :1] = R[:, :1] + dt * current_to_frequency(I_total[:, :1], 'E', parameters) / tau_ampa - dt * R[:, :1] / tau_ampa
+        R_next[:, 1:2] = 0 * brian2.Hz
+        R_next[:, 2] = R[:, 2] + dt * current_to_frequency(I_total[:, 2], 'PV', parameters) / tau_ampa - dt * R[:, 2] / tau_ampa
+        R_next[:, 3:4] = R[:, 3:4] + dt * current_to_frequency(I_total[:, 3:4], 'SST', parameters) / tau_ampa - dt * R[:, 3:4] / tau_ampa
+        R_next[:, 4:] = R[:, 4:] + dt * current_to_frequency(I_total[:, 4:], 'VIP', parameters) / tau_ampa - dt * R[:, 4:] / tau_ampa
 
-        I_total_abs[i_t-1,:,:] = abs(I_local_nmda[i_t-1,:,:]) + abs(I_local_ampa[i_t-1,:,:]) +  abs(I_local_gaba[i_t-1,:,:]) + abs(I_0) + abs(I_ext[i_t-1,:,:]) + abs(I_noise) + abs(I_lr_nmda[i_t-1,:,:]) + abs(I_lr_ampa[i_t-1,:,:]) + abs(I_soma_dend[i_t-1,:,:]) + abs(I_adapt[i_t-1,:,:])
+        s_nmda[:, :1] = s_nmda[:, :1] + dt * NMDA_deriv(s_nmda[:, :1], R_next[:, :1], parameters)
+        s_ampa[:, :1] = s_ampa[:, :1] + dt * AMPA_deriv(s_ampa[:, :1], R_next[:, :1], parameters)
+        s_gaba[:, 2:] = s_gaba[:, 2:] + dt * GABA_deriv(s_gaba[:, 2:], R_next[:, 2:], parameters, 'soma')
+        s_gaba_dend[:, 2:] = s_gaba_dend[:, 2:] + dt * GABA_deriv(s_gaba_dend[:, 2:], R_next[:, 2:], parameters, 'dendrite')
+        s_adapt[:, :] = s_adapt[:, :] + dt * adaptation_deriv(s_adapt[:, :], R_next[:, :], parameters)
+        R, R_next = R_next, R
 
-        
-        # Update the firing rates of the two excitatory populations.
-        R[i_t,:,:1] = R[i_t-1,:,:1] + parameters['dt']*current_to_frequency(I_total[i_t-1,:,:1],'E',parameters)/parameters['tau_ampa'] -parameters['dt']*R[i_t-1,:,:1]/parameters['tau_ampa']
-
-        # Update the firing rates of the PV population. 
-        R[i_t,:,2] =  R[i_t-1,:,2] + parameters['dt']*current_to_frequency(I_total[i_t-1,:,2],'PV',parameters)/parameters['tau_ampa'] -parameters['dt']*R[i_t-1,:,2]/parameters['tau_ampa']
-
-        # Update the firing rates of the SST populations. 
-        R[i_t,:,3:4] =  R[i_t-1,:,3:4] + parameters['dt']*current_to_frequency(I_total[i_t-1,:,3:4],'SST',parameters)/parameters['tau_ampa'] -parameters['dt']*R[i_t-1,:,3:4]/parameters['tau_ampa']
-
-        # Update the firing rates of the VIP populations. 
-        R[i_t,:,4:] =  R[i_t-1,:,4:] +  parameters['dt']*current_to_frequency(I_total[i_t-1,:,4:],'VIP',parameters)/parameters['tau_ampa'] -parameters['dt']*R[i_t-1,:,4:]/parameters['tau_ampa']
-
-        # Update the NMDA synapses
-        s_nmda[i_t,:,:1] = s_nmda[i_t-1,:,:1] + parameters['dt']*NMDA_deriv(s_nmda[i_t-1,:,:1],R[i_t,:,:1],parameters)
-
-        # Update the AMPA synapses
-        s_ampa[i_t,:,:1] = s_ampa[i_t-1,:,:1] + parameters['dt']*AMPA_deriv(s_ampa[i_t-1,:,:1],R[i_t,:,:1],parameters)
-
-        # Update the GABA synapses onto the somata
-        s_gaba[i_t,:,2:] = s_gaba[i_t-1,:,2:] + parameters['dt']*GABA_deriv(s_gaba[i_t-1,:,2:],R[i_t,:,2:],parameters,'soma')
-
-        # Update the GABA synapses onto the dendrites
-        s_gaba_dend[i_t,:,2:] = s_gaba_dend[i_t-1,:,2:] + parameters['dt']*GABA_deriv(s_gaba_dend[i_t-1,:,2:],R[i_t,:,2:],parameters,'dendrite')
-
-        # Update the adaptation variable
-        s_adapt[i_t,:,:] = s_adapt[i_t-1,:,:] + parameters['dt']*adaptation_deriv(s_adapt[i_t-1,:,:],R[i_t,:,:],parameters)
-
-    return(R)
+    return area_drive_abs
 
 
-LEGACY_ANALYSIS_CODE = r'''
+# Analysis helpers used by the FC / plotting workflow.
 def plot_all_areas_2col(
     R,
     area_names,
@@ -627,6 +670,8 @@ def plot_all_areas_2col(
     figsize_per_row=2.6,
     dpi=120,
 ):
+    import math
+
     # --- dt in seconds (float)
     dt_s = float(dt / b2.second) if hasattr(dt, "unit") else float(dt)
 
@@ -717,6 +762,8 @@ def plot_all_areas_2col(
 
 
 def acf_1d(x, max_lag, *, fft=True, missing="none"):
+    from statsmodels.tsa.api import acf as sm_acf
+
     x = np.asarray(x, dtype=float)
     n = x.size
     if n <= 1:
@@ -1163,11 +1210,29 @@ def plot_bold(bold, dt, *, area_names=None, percent=True, max_areas=40):
 
 
 def seed_based_fc(bold, seed_idx):
+    bold = np.asarray(bold, dtype=float)
     seed = bold[:, seed_idx]
-    return np.array([
-        np.corrcoef(seed, bold[:, a])[0, 1]
-        for a in range(bold.shape[1])
-    ])
+    if np.ndim(seed) == 1:
+        seed_ts = seed
+    else:
+        seed_ts = np.mean(seed, axis=1)
+
+    seed_std = np.std(seed_ts)
+
+    fc = np.full(bold.shape[1], np.nan, dtype=float)
+    if not np.isfinite(seed_std) or np.isclose(seed_std, 0.0):
+        return fc
+
+    for a in range(bold.shape[1]):
+        area_ts = bold[:, a]
+        area_std = np.std(area_ts)
+        if not np.isfinite(area_std) or np.isclose(area_std, 0.0):
+            continue
+        corr = np.corrcoef(seed_ts, area_ts)[0, 1]
+        if np.isfinite(corr):
+            fc[a] = float(corr)
+
+    return fc
 
 
 import pandas as pd
@@ -1257,36 +1322,94 @@ def drive_abs_to_balloon_input(
         if clamp_nonnegative:
             x = np.maximum(0.0, x)
         return x, d0
-'''
-
-
 FAILURE_PENALTY = 1e9
+DEFAULT_FC_TARGET_CSV = Path(r'C:\Users\GlenA\Downloads\MB_NS_acc.left_subgraph_L.csv')
 
+#TESTING HERE
 PARAMETER_SPACE = [
-    ('I_background_e', 230.0, 390.0, brian2.pA, 0.5, float(PARAMS['I_background_e'] / brian2.pA)),
-    ('I_background_i', 230.0, 390.0, brian2.pA, 0.5, float(PARAMS['I_background_i'] / brian2.pA)),
-    ('I_background_dend', 0.0, 40.0, brian2.pA, 0.25, float(PARAMS['I_background_dend'] / brian2.pA)),
+    ('I_background_e', 100.0, 600.0, brian2.pA, 0.5, float(PARAMS['I_background_e'] / brian2.pA)),
+    ('I_background_i', 100.0, 600.0, brian2.pA, 0.5, float(PARAMS['I_background_i'] / brian2.pA)),
+    ('I_background_dend', 0.0, 80.0, brian2.pA, 0.25, float(PARAMS['I_background_dend'] / brian2.pA)),
     ('mu_ee', 0.5, 6.0, None, 0.03, float(PARAMS['mu_ee'])),
     ('mu_ie', 0.5, 6.0, None, 0.03, float(PARAMS['mu_ie'])),
+    ('e_grad_min', 0.1, 0.45, None, 0.005, float(PARAMS['e_grad_min'])),
+]
+
+BOLD_PARAMETER_SPACE = [
+    ('balloon_kappa', 0.10, 2.00, 0.04),
+    ('balloon_gamma', 0.05, 1.50, 0.03),
+    ('balloon_tau', 0.30, 2.50, 0.04),
 ]
 
 FITNESS_CONFIG = {
-    'ignore_initial': 0.20 * brian2.second,
-    'target_delta_hz': 3.0,
+    'target_csv': str(DEFAULT_FC_TARGET_CSV) if DEFAULT_FC_TARGET_CSV.exists() else None,
+    'target_column': 'mean_connectivity',
+    'seed_idx': None,
+    'seed_area': None,
+    'seed_areas': ['24c', '32'],
+    'fc_distance': 'mse',
+    'fc_trim_seconds': 0.4,
+    'fc_balloon_dt': 120 * brian2.ms,
+    'fc_drive_gain': 1.0,
+    'fc_baseline_start_seconds': 3.0,
+    'fc_baseline_end_seconds': 20.0,
+    'fc_balloon_gain': 0.025,
+    'fc_clamp_nonnegative': False,
+    'fc_fisher_z_clip': 2.0,
+    'balloon_kappa': 0.65,
+    'balloon_gamma': 0.41,
+    'balloon_tau': 0.98,
+    'balloon_alpha': 0.32,
+    'balloon_E0': 0.4,
+    'balloon_V0': 0.04,
+    'balloon_epsilon': 2.0,
+    'balloon_TE': 0.0254,
+    'balloon_theta0': 80.6,
+    'balloon_r0': 25.0,
+    'balloon_neural_gain': 1.0,
+    'balloon_max_step': 0.05,
+    'balloon_method': 'rk4',
 }
 
 
 def initial_parameter_vector():
-    return np.array([curr for (_, _, _, _, _, curr) in PARAMETER_SPACE], dtype=float)
+    return np.concatenate(
+        (
+            initial_neural_parameter_vector(),
+            initial_bold_parameter_vector(),
+        )
+    )
 
 
 def sigma_vector():
-    return np.array([sigma for (_, _, _, _, sigma, _) in PARAMETER_SPACE], dtype=float)
+    return np.concatenate((neural_sigma_vector(), bold_sigma_vector()))
 
 
 def parameter_bounds():
+    neural_lower, neural_upper = neural_parameter_bounds()
+    bold_lower, bold_upper = bold_parameter_bounds()
+    lower = list(neural_lower) + list(bold_lower)
+    upper = list(neural_upper) + list(bold_upper)
+    return [lower, upper]
+
+
+def initial_neural_parameter_vector():
+    return np.array([curr for (_, _, _, _, _, curr) in PARAMETER_SPACE], dtype=float)
+
+
+def neural_sigma_vector():
+    return np.array([sigma for (_, _, _, _, sigma, _) in PARAMETER_SPACE], dtype=float)
+
+
+def neural_parameter_bounds():
     lower = [lo for (_, lo, _, _, _, _) in PARAMETER_SPACE]
     upper = [hi for (_, _, hi, _, _, _) in PARAMETER_SPACE]
+    return [lower, upper]
+
+
+def bold_parameter_bounds():
+    lower = [lo for (_, lo, _, _) in BOLD_PARAMETER_SPACE]
+    upper = [hi for (_, _, hi, _) in BOLD_PARAMETER_SPACE]
     return [lower, upper]
 
 
@@ -1307,6 +1430,102 @@ def vector_to_plain_dict(param_vector):
     }
 
 
+def plain_dict_to_parameter_vector(param_dict):
+    return np.array([float(param_dict[name]) for (name, _, _, _, _, _) in PARAMETER_SPACE], dtype=float)
+
+
+def initial_bold_parameter_vector(config=None):
+    merged = FITNESS_CONFIG.copy()
+    if config:
+        merged.update(config)
+    return np.array([float(merged[name]) for (name, _, _, _) in BOLD_PARAMETER_SPACE], dtype=float)
+
+
+def bold_sigma_vector():
+    return np.array([sigma for (_, _, _, sigma) in BOLD_PARAMETER_SPACE], dtype=float)
+
+
+def vector_to_bold_config(param_vector):
+    return {
+        name: float(value)
+        for (name, _, _, _), value in zip(BOLD_PARAMETER_SPACE, param_vector)
+    }
+
+
+def load_result_summary(summary_path):
+    summary_path = Path(summary_path).expanduser().resolve()
+    if not summary_path.exists():
+        raise FileNotFoundError(f"Result summary not found: {summary_path}")
+
+    with summary_path.open('r', encoding='utf-8') as handle:
+        payload = json.load(handle)
+
+    neural_params = payload.get('best_params')
+    if not isinstance(neural_params, dict):
+        raise ValueError("Result summary is missing a valid 'best_params' object.")
+
+    bold_params = payload.get('best_bold_params')
+    if bold_params is not None and not isinstance(bold_params, dict):
+        raise ValueError("Result summary has an invalid 'best_bold_params' object.")
+
+    missing_neural = [
+        name for (name, _, _, _, _, _) in PARAMETER_SPACE
+        if name not in neural_params
+    ]
+    if missing_neural:
+        raise ValueError(
+            "Result summary is missing neural parameters: "
+            + ", ".join(missing_neural)
+        )
+
+    if bold_params is None:
+        bold_params = {}
+    missing_bold = [
+        name for (name, _, _, _) in BOLD_PARAMETER_SPACE
+        if name not in bold_params
+    ]
+    if missing_bold:
+        raise ValueError(
+            "Result summary is missing BOLD parameters: "
+            + ", ".join(missing_bold)
+        )
+
+    return {
+        'path': str(summary_path),
+        'neural_vector': plain_dict_to_parameter_vector(neural_params),
+        'bold_vector': np.array([float(bold_params[name]) for (name, _, _, _) in BOLD_PARAMETER_SPACE], dtype=float),
+        'joint_vector': np.concatenate(
+            (
+                plain_dict_to_parameter_vector(neural_params),
+                np.array([float(bold_params[name]) for (name, _, _, _) in BOLD_PARAMETER_SPACE], dtype=float),
+            )
+        ),
+        'neural_params': {
+            name: float(neural_params[name]) for (name, _, _, _, _, _) in PARAMETER_SPACE
+        },
+        'bold_params': {
+            name: float(bold_params[name]) for (name, _, _, _) in BOLD_PARAMETER_SPACE
+        },
+    }
+
+
+def split_joint_parameter_vector(param_vector):
+    vector = np.asarray(param_vector, dtype=float)
+    neural_dim = len(PARAMETER_SPACE)
+    bold_dim = len(BOLD_PARAMETER_SPACE)
+    expected_dim = neural_dim + bold_dim
+    if vector.size != expected_dim:
+        raise ValueError(
+            f"Expected joint parameter vector of length {expected_dim}, got {vector.size}."
+        )
+    return vector[:neural_dim], vector[neural_dim:neural_dim + bold_dim]
+
+
+def joint_vector_to_plain_dicts(param_vector):
+    neural_vector, bold_vector = split_joint_parameter_vector(param_vector)
+    return vector_to_plain_dict(neural_vector), vector_to_bold_config(bold_vector)
+
+
 def save_default_params(path):
     with path.open('wb') as handle:
         pickle.dump(PARAMS, handle)
@@ -1319,9 +1538,216 @@ def _mean_rate_in_window(rate, t, t_start, t_end):
     return float(np.mean(rate[mask]))
 
 
-def run_simulation(param_vector, override_params=None):
+def _to_seconds(value):
+    return float(value / brian2.second) if hasattr(value, 'unit') else float(value)
+
+
+def _derive_simulation_seed(master_seed, *components):
+    if master_seed is None:
+        return None
+
+    spawn_key = [int(master_seed)]
+    spawn_key.extend(int(component) for component in components)
+    seed_seq = np.random.SeedSequence(spawn_key)
+    return int(seed_seq.generate_state(1, dtype=np.uint32)[0])
+
+
+def _resolve_model_seed_indices(area_names, *, seed_areas=None, seed_area=None, seed_indices=None, seed_idx=None):
+    if seed_areas is not None:
+        resolved_seed_areas = list(seed_areas)
+        missing = [name for name in resolved_seed_areas if name not in area_names]
+        if missing:
+            raise ValueError(f"seed_areas not found in model areas: {', '.join(missing)}")
+        indices = [int(area_names.index(name)) for name in resolved_seed_areas]
+        return indices, resolved_seed_areas
+
+    if seed_area is not None:
+        if seed_area not in area_names:
+            raise ValueError(f"seed_area '{seed_area}' not found in model areas.")
+        return [int(area_names.index(seed_area))], [str(seed_area)]
+
+    if seed_indices is not None:
+        indices = [int(value) for value in seed_indices]
+        for index in indices:
+            if index < 0 or index >= len(area_names):
+                raise ValueError(f"seed index {index} is out of bounds for {len(area_names)} areas.")
+        return indices, [str(area_names[index]) for index in indices]
+
+    if seed_idx is None:
+        raise ValueError("Provide seed_area, seed_areas, seed_idx, or seed_indices for FC fitness.")
+
+    seed_idx = int(seed_idx)
+    if seed_idx < 0 or seed_idx >= len(area_names):
+        raise ValueError(f"seed_idx {seed_idx} is out of bounds for {len(area_names)} areas.")
+    return [seed_idx], [str(area_names[seed_idx])]
+
+
+def _clip_window_to_indices(n_samples, dt_s, start_s, end_s):
+    i0 = max(0, int(round(start_s / dt_s)))
+    i1 = min(n_samples, int(round(end_s / dt_s)))
+    if i1 <= i0:
+        if n_samples < 2:
+            raise ValueError("Not enough samples to construct a baseline window.")
+        return 0, n_samples
+    return i0, i1
+
+
+def _balloon_kwargs_from_config(config):
+    return {
+        'kappa': float(config['balloon_kappa']),
+        'gamma': float(config['balloon_gamma']),
+        'tau': float(config['balloon_tau']),
+        'alpha': float(config['balloon_alpha']),
+        'E0': float(config['balloon_E0']),
+        'V0': float(config['balloon_V0']),
+        'TE': float(config['balloon_TE']),
+        'epsilon': float(config['balloon_epsilon']),
+        'theta0': float(config['balloon_theta0']),
+        'r0': float(config['balloon_r0']),
+        'neural_gain': float(config['balloon_neural_gain']),
+        'max_step': float(config['balloon_max_step']),
+    }
+
+
+def _aggregate_losses(losses, mode):
+    arr = np.asarray(losses, dtype=float)
+    if arr.size == 0:
+        return FAILURE_PENALTY
+    if mode == 'mean':
+        return float(np.mean(arr))
+    if mode == 'median':
+        return float(np.median(arr))
+    raise ValueError(f"Unsupported bold_aggregate mode: {mode}")
+
+
+def _normalise_neural_vector(vector):
+    lower, upper = parameter_bounds()
+    lower = np.asarray(lower, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+    span = np.maximum(upper - lower, 1e-12)
+    return (np.asarray(vector, dtype=float) - lower) / span
+
+
+def _correlation_to_clipped_fisher_z(values, clip_value=2.0):
+    arr = np.asarray(values, dtype=float)
+    z = np.full(arr.shape, np.nan, dtype=float)
+    finite = np.isfinite(arr)
+    if np.any(finite):
+        clipped_r = np.clip(arr[finite], -1.0 + 1e-6, 1.0 - 1e-6)
+        z[finite] = np.arctanh(clipped_r)
+        if clip_value is not None:
+            z[finite] = np.clip(z[finite], -float(clip_value), float(clip_value))
+    return z
+
+
+def load_fc_target(csv_path, *, value_column='mean_connectivity'):
+    target_path = Path(csv_path).expanduser().resolve()
+    cache_key = (str(target_path), str(value_column))
+    cached = _FC_TARGET_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    if not target_path.exists():
+        raise FileNotFoundError(f"Target FC CSV not found: {target_path}")
+
+    df = pandas.read_csv(target_path)
+    required_columns = {'area_name', value_column}
+    missing_columns = sorted(required_columns.difference(df.columns))
+    if missing_columns:
+        raise ValueError(
+            f"Target FC CSV is missing required columns: {', '.join(missing_columns)}"
+        )
+
+    area_names = df['area_name'].astype(str).tolist()
+    if len(area_names) != len(set(area_names)):
+        raise ValueError("Target FC CSV contains duplicate area_name values.")
+
+    target_values = pandas.to_numeric(df[value_column], errors='coerce').to_numpy(dtype=float)
+    target_spec = {
+        'path': str(target_path),
+        'area_names': area_names,
+        'values': target_values,
+        'value_column': value_column,
+        'seed_label': str(df['seed'].iloc[0]) if 'seed' in df.columns and not df.empty else None,
+        'condition': str(df['condition'].iloc[0]) if 'condition' in df.columns and not df.empty else None,
+    }
+    _FC_TARGET_CACHE[cache_key] = target_spec
+    return target_spec
+
+
+def align_target_fc(target_spec, area_names):
+    value_by_area = {
+        area_name: float(value)
+        for area_name, value in zip(target_spec['area_names'], target_spec['values'])
+    }
+    missing = [area_name for area_name in area_names if area_name not in value_by_area]
+    if missing:
+        raise ValueError(
+            "Target FC CSV does not contain all model areas. "
+            f"Missing: {', '.join(missing)}"
+        )
+
+    return np.array([value_by_area[area_name] for area_name in area_names], dtype=float)
+
+
+def compute_seed_fc_from_drive(area_drive_abs, params_run, area_names, *, fitness_config):
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+
+    seed_indices, seed_area_names = _resolve_model_seed_indices(
+        area_names,
+        seed_areas=config.get('seed_areas'),
+        seed_area=config.get('seed_area'),
+        seed_idx=config.get('seed_idx'),
+    )
+
+    dt_old = params_run['dt']
+    dt_old_s = _to_seconds(dt_old)
+    trim_steps = max(0, int(round(float(config['fc_trim_seconds']) / dt_old_s)))
+
+    if trim_steps >= area_drive_abs.shape[0] - 1:
+        raise ValueError("fc_trim_seconds removes the full simulation.")
+
+    drive = np.asarray(area_drive_abs[trim_steps:, :] / brian2.pA, dtype=float) * float(config['fc_drive_gain'])
+    drive_ds, _, dt_balloon_s = downsample_to_dt(drive, dt_old, config['fc_balloon_dt'])
+
+    i0, i1 = _clip_window_to_indices(
+        drive_ds.shape[0],
+        dt_balloon_s,
+        float(config['fc_baseline_start_seconds']),
+        float(config['fc_baseline_end_seconds']),
+    )
+
+    balloon_input, drive0 = drive_abs_to_balloon_input(
+        drive_ds,
+        baseline_idx=(i0, i1),
+        gain=float(config['fc_balloon_gain']),
+        clamp_nonnegative=bool(config['fc_clamp_nonnegative']),
+    )
+
+    bold, _ = balloon_bold_per_area(
+        balloon_input,
+        dt=dt_balloon_s,
+        method=str(config.get('balloon_method', 'rk4')),
+        **_balloon_kwargs_from_config(config),
+    )
+    fc_vector = seed_based_fc(bold, seed_indices if len(seed_indices) > 1 else seed_indices[0])
+
+    return {
+        'seed_idx': seed_indices[0] if len(seed_indices) == 1 else None,
+        'seed_area': seed_area_names[0] if len(seed_area_names) == 1 else '+'.join(seed_area_names),
+        'seed_indices': seed_indices,
+        'seed_areas': seed_area_names,
+        'seed_fc': fc_vector,
+        'dt_balloon_s': dt_balloon_s,
+        'drive_baseline': drive0,
+    }
+
+
+def run_simulation(param_vector, override_params=None, *, simulation_seed=None):
+    neural_vector, _ = split_joint_parameter_vector(param_vector)
     params_run = PARAMS.copy()
-    params_run.update(vector_to_param_dict(param_vector))
+    params_run.update(vector_to_param_dict(neural_vector))
     if override_params:
         params_run.update(override_params)
 
@@ -1335,27 +1761,22 @@ def run_simulation(param_vector, override_params=None):
             params_run, spine_count_raw, fln, sln, d1_density_raw
         )
 
-        (num_iterations, R, s_nmda, s_ampa, s_gaba, s_gaba_dend, s_adapt,
-         I_ext, I_lr_nmda, I_lr_ampa, I_local_nmda, I_local_ampa, I_local_gaba,
-         I_soma_dend, I_total, I_exc_dend, I_inh_dend, I_local_gaba_dend, I_adapt,
-         I_0, I_noise, noise_rhs, I_total_abs) = initialise_variables(
-            params_run, num_areas, num_pops, num_e_pops, area_list_SLN, pops
+        rng = np.random.default_rng(simulation_seed)
+        state = initialise_simulation_state(
+            params_run, num_areas, num_pops, area_list_SLN, pops, rng=rng
         )
 
-        R = large_scale_da_model(
-            pops, num_pops, num_e_pops, num_areas, e_grad, g_adapt, g_m, ampa_frac, nmda_frac,
+        area_drive_abs = large_scale_da_model(
+            pops, num_pops, num_areas, e_grad, g_adapt, g_m, ampa_frac, nmda_frac,
             J_nmda, J_ampa, J_gaba, J_gaba_dend, W_superficial, W_deep, lr_targets,
-            nmda_da_grad, e_pv_da_mat, e_sst_da_mat, m_da_grad, num_iterations, R, s_nmda,
-            s_ampa, s_gaba, s_gaba_dend, s_adapt, I_ext, I_lr_nmda, I_lr_ampa,
-            I_local_nmda, I_local_ampa, I_local_gaba, I_soma_dend, I_total, I_exc_dend,
-            I_inh_dend, I_local_gaba_dend, I_adapt, I_0, I_noise, noise_rhs, params_run,
-            lr_targets_FEF, I_total_abs, area_list_SLN
+            nmda_da_grad, e_pv_da_mat, e_sst_da_mat, m_da_grad, state, params_run,
+            lr_targets_FEF, area_list_SLN
         )
 
         return {
             'params': params_run,
             'area_names': area_list_SLN,
-            'E1_V1': np.asarray(R[:, area_list_SLN.index('V1'), 0] / brian2.Hz, dtype=float),
+            'area_drive_abs': area_drive_abs,
         }
     except Exception as e:
         import traceback
@@ -1372,31 +1793,48 @@ def summarise_simulation(simulation, fitness_config=None):
     if fitness_config:
         config.update(fitness_config)
 
-    e1_v1 = simulation['E1_V1']
-    if not np.all(np.isfinite(e1_v1)):
+    target_csv = config.get('target_csv')
+    if not target_csv:
+        raise ValueError("target_csv is required because the deprecated rate-based fitness path has been removed.")
+
+    target_spec = load_fc_target(target_csv, value_column=config['target_column'])
+    target_fc = align_target_fc(target_spec, simulation['area_names'])
+    model_fc = compute_seed_fc_from_drive(
+        simulation['area_drive_abs'],
+        simulation['params'],
+        simulation['area_names'],
+        fitness_config=config,
+    )
+    seed_indices = [int(value) for value in model_fc['seed_indices']]
+    exclude_mask = np.zeros(len(simulation['area_names']), dtype=bool)
+    exclude_mask[seed_indices] = True
+
+    model_fc_r = np.asarray(model_fc['seed_fc'], dtype=float)
+    model_fc_z = _correlation_to_clipped_fisher_z(
+        model_fc_r,
+        clip_value=config.get('fc_fisher_z_clip', 2.0),
+    )
+    target_fc_z = np.asarray(target_fc, dtype=float)
+    valid_mask = np.isfinite(model_fc_z) & np.isfinite(target_fc_z) & (~exclude_mask)
+    if not np.any(valid_mask):
         return None
 
-    n_steps = e1_v1.shape[0]
-    t = np.arange(n_steps) * simulation['params']['dt']
-    t_ignore = config['ignore_initial']
-
-    stim_e1_v1 = _mean_rate_in_window(
-        e1_v1,
-        t,
-        simulation['params']['stim_on'],
-        simulation['params']['stim_off'],
-    )
-
-    off_mask_v1 = (
-        (t >= t_ignore)
-        & ((t < simulation['params']['stim_on']) | (t >= simulation['params']['stim_off']))
-    )
-    mean_offstim_e1_v1 = float(np.mean(e1_v1[off_mask_v1])) if np.any(off_mask_v1) else 0.0
-
     return {
-        'stim_e1_v1': stim_e1_v1,
-        'mean_offstim_e1_v1': mean_offstim_e1_v1,
-        'v1_delta': stim_e1_v1 - mean_offstim_e1_v1,
+        'target_fc': target_fc_z,
+        'seed_fc': model_fc_z,
+        'seed_fc_r': model_fc_r,
+        'seed_idx': model_fc['seed_idx'],
+        'seed_area': model_fc['seed_area'],
+        'seed_indices': model_fc['seed_indices'],
+        'seed_areas': model_fc['seed_areas'],
+        'fc_valid_count': int(np.count_nonzero(valid_mask)),
+        'valid_mask': valid_mask,
+        'excluded_seed_count': int(np.count_nonzero(exclude_mask)),
+        'fc_target_seed': target_spec['seed_label'],
+        'fc_target_condition': target_spec['condition'],
+        'fc_target_column': target_spec['value_column'],
+        'fc_target_path': target_spec['path'],
+        'dt_balloon_s': model_fc['dt_balloon_s'],
     }
 
 
@@ -1409,54 +1847,441 @@ def fitness_from_summary(summary, fitness_config=None):
     if fitness_config:
         config.update(fitness_config)
 
-    fitness = (summary['v1_delta'] - config['target_delta_hz']) ** 2
+    valid_mask = np.asarray(summary.get('valid_mask'), dtype=bool)
+    if not np.any(valid_mask):
+        return FAILURE_PENALTY
+
+    diff = summary['seed_fc'][valid_mask] - summary['target_fc'][valid_mask]
+    metric = str(config.get('fc_distance', 'mse')).lower()
+    if metric == 'mse':
+        fitness = np.mean(diff ** 2)
+    elif metric == 'rmse':
+        fitness = np.sqrt(np.mean(diff ** 2))
+    elif metric == 'mae':
+        fitness = np.mean(np.abs(diff))
+    elif metric == 'l2':
+        fitness = np.linalg.norm(diff)
+    else:
+        raise ValueError(f"Unsupported fc_distance metric: {config['fc_distance']}")
     return float(fitness) if np.isfinite(fitness) else FAILURE_PENALTY
 
 
-def evaluate_fitness(param_vector, fitness_config=None):
-    simulation = run_simulation(param_vector)
+def evaluate_fitness(param_vector, fitness_config=None, simulation_seed=None):
+    _, bold_vector = split_joint_parameter_vector(param_vector)
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    config.update(vector_to_bold_config(bold_vector))
+
+    simulation = run_simulation(param_vector, simulation_seed=simulation_seed)
     if simulation is None:
         return FAILURE_PENALTY
 
-    summary = summarise_simulation(simulation, fitness_config=fitness_config)
+    summary = summarise_simulation(simulation, fitness_config=config)
     if summary is None:
         return FAILURE_PENALTY
 
-    return fitness_from_summary(summary, fitness_config=fitness_config)
+    return fitness_from_summary(summary, fitness_config=config)
 
 
 EVALUATE_FITNESS_JOB = wrap_non_picklable_objects(evaluate_fitness)
 
+
+def evaluate_candidate_record(param_vector, fitness_config=None, simulation_seed=None):
+    vector = np.asarray(param_vector, dtype=float)
+    _, bold_vector = split_joint_parameter_vector(vector)
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    config.update(vector_to_bold_config(bold_vector))
+
+    simulation = run_simulation(vector, simulation_seed=simulation_seed)
+    if simulation is None:
+        return {
+            'vector': vector,
+            'fitness': FAILURE_PENALTY,
+            'simulation': None,
+            'summary': None,
+        }
+
+    summary = summarise_simulation(simulation, fitness_config=config)
+    fitness = fitness_from_summary(summary, fitness_config=config)
+    return {
+        'vector': vector,
+        'fitness': float(fitness),
+        'simulation': simulation,
+        'summary': summary,
+    }
+
+
+EVALUATE_CANDIDATE_RECORD_JOB = wrap_non_picklable_objects(evaluate_candidate_record)
+
+
 def parallel_fitness(population, workers=None, fitness_config=None):
     if workers is None:
         workers = min(mp.cpu_count(), len(population))
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    master_seed = config.get('simulation_seed')
+    generation = int(config.get('generation', 0))
+    simulation_seeds = [
+        _derive_simulation_seed(master_seed, 1, generation, idx)
+        for idx in range(len(population))
+    ]
     return Parallel(n_jobs=workers, backend='loky')(
-        delayed(EVALUATE_FITNESS_JOB)(candidate, fitness_config=fitness_config)
+        delayed(EVALUATE_FITNESS_JOB)(
+            candidate,
+            fitness_config=fitness_config,
+            simulation_seed=simulation_seeds[idx],
+        )
+        for idx, candidate in enumerate(population)
+    )
+
+
+def parallel_candidate_records(population, workers=None, fitness_config=None):
+    if workers is None:
+        workers = min(mp.cpu_count(), len(population))
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    master_seed = config.get('simulation_seed')
+    generation = int(config.get('generation', 0))
+    simulation_seeds = [
+        _derive_simulation_seed(master_seed, 1, generation, idx)
+        for idx in range(len(population))
+    ]
+    return Parallel(n_jobs=workers, backend='loky')(
+        delayed(EVALUATE_CANDIDATE_RECORD_JOB)(
+            candidate,
+            fitness_config=fitness_config,
+            simulation_seed=simulation_seeds[idx],
+        )
+        for idx, candidate in enumerate(population)
+    )
+
+
+def select_diverse_neural_elites(candidate_records, count, *, min_distance=0.08):
+    ranked = sorted(
+        (
+            record for record in candidate_records
+            if record.get('simulation') is not None and np.isfinite(record.get('fitness', FAILURE_PENALTY))
+        ),
+        key=lambda record: float(record['fitness']),
+    )
+    if count <= 0 or not ranked:
+        return []
+
+    selected = []
+    selected_indices = set()
+    normalised = [_normalise_neural_vector(record['vector']) for record in ranked]
+
+    for idx, record in enumerate(ranked):
+        if not selected:
+            selected.append(record)
+            selected_indices.add(idx)
+            if len(selected) >= count:
+                return selected
+            continue
+
+        distances = [
+            float(np.linalg.norm(normalised[idx] - normalised[prev_idx]))
+            for prev_idx in selected_indices
+        ]
+        if all(distance >= float(min_distance) for distance in distances):
+            selected.append(record)
+            selected_indices.add(idx)
+            if len(selected) >= count:
+                return selected
+
+    for idx, record in enumerate(ranked):
+        if idx in selected_indices:
+            continue
+        selected.append(record)
+        selected_indices.add(idx)
+        if len(selected) >= count:
+            break
+
+    return selected
+
+
+def select_top_neural_elites(candidate_records, count):
+    ranked = sorted(
+        (
+            record for record in candidate_records
+            if record.get('simulation') is not None and np.isfinite(record.get('fitness', FAILURE_PENALTY))
+        ),
+        key=lambda record: float(record['fitness']),
+    )
+    return ranked[:max(0, int(count))]
+
+
+def update_top_neural_elite_archive(elite_records, candidate_records, count):
+    return select_top_neural_elites(list(elite_records) + list(candidate_records), count)
+
+
+def _jsonable_summary(summary):
+    if summary is None:
+        return None
+
+    payload = {}
+    for key, value in summary.items():
+        if isinstance(value, np.ndarray):
+            payload[key] = value.tolist()
+        elif isinstance(value, np.generic):
+            payload[key] = value.item()
+        else:
+            payload[key] = value
+    return payload
+
+
+def save_neural_elites(log_dir, elite_records):
+    log_dir = Path(log_dir)
+    elite_pickle_path = log_dir / 'neural_elites.pkl'
+    elite_manifest_path = log_dir / 'neural_elites_manifest.json'
+
+    with elite_pickle_path.open('wb') as handle:
+        pickle.dump(elite_records, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    manifest = []
+    for idx, record in enumerate(elite_records):
+        manifest.append({
+            'elite_index': int(idx),
+            'fitness': float(record['fitness']),
+            'vector': np.asarray(record['vector'], dtype=float).tolist(),
+            'params': vector_to_plain_dict(record['vector']),
+            'summary': _jsonable_summary(record.get('summary')),
+        })
+
+    with elite_manifest_path.open('w', encoding='utf-8') as handle:
+        json.dump(manifest, handle, indent=2)
+
+    return {
+        'neural_elites_pickle': str(elite_pickle_path),
+        'neural_elites_manifest': str(elite_manifest_path),
+    }
+
+
+def evaluate_bold_fitness_on_cached_drives(bold_vector, elite_records, *, fitness_config=None):
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    config.update(vector_to_bold_config(bold_vector))
+
+    losses = []
+    for record in elite_records:
+        summary = summarise_simulation(record['simulation'], fitness_config=config)
+        losses.append(fitness_from_summary(summary, fitness_config=config))
+
+    return _aggregate_losses(losses, str(config.get('bold_aggregate', 'median')).lower())
+
+
+EVALUATE_BOLD_FITNESS_JOB = wrap_non_picklable_objects(evaluate_bold_fitness_on_cached_drives)
+
+
+def parallel_bold_fitness(population, elite_records, *, workers=None, fitness_config=None):
+    if workers is None:
+        workers = min(mp.cpu_count(), len(population))
+    return Parallel(n_jobs=workers, backend='loky')(
+        delayed(EVALUATE_BOLD_FITNESS_JOB)(
+            candidate,
+            elite_records,
+            fitness_config=fitness_config,
+        )
         for candidate in population
     )
+
+
+def run_bold_cmaes_on_elites(elite_records, *, fitness_config=None, seed=None, workers=None, x0=None):
+    if cma is None:
+        raise ImportError("The 'cma' package is required to run optimisation.")
+    if not elite_records:
+        raise ValueError("At least one elite neural record is required for BOLD optimisation.")
+
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    sigma0 = float(config.get('bold_sigma0', 0.12))
+    popsize = int(config.get('bold_popsize', 8))
+    maxfevals = int(config.get('bold_maxfevals', 40))
+    if workers is None:
+        workers = min(mp.cpu_count(), popsize)
+    else:
+        workers = max(1, min(int(workers), popsize))
+
+    x0 = initial_bold_parameter_vector(config) if x0 is None else np.asarray(x0, dtype=float)
+    cma_options = {
+        'bounds': bold_parameter_bounds(),
+        'popsize': popsize,
+        'maxfevals': maxfevals,
+        'verb_log': 0,
+        'verb_disp': 0,
+        'CMA_stds': bold_sigma_vector(),
+    }
+    if seed is not None:
+        cma_options['seed'] = int(seed)
+
+    es = cma.CMAEvolutionStrategy(x0, sigma0, inopts=cma_options)
+    bold_generation = 0
+    bold_eval_count = 0
+    block_start = time.perf_counter()
+    print(
+        f"[BOLD] Starting inner optimisation: elites={len(elite_records)}, "
+        f"popsize={popsize}, maxfevals={maxfevals}, sigma0={sigma0:.4f}, workers={workers}"
+    )
+    while not es.stop():
+        population = es.ask()
+        fitness_values = parallel_bold_fitness(
+            population,
+            elite_records,
+            workers=workers,
+            fitness_config=config,
+        )
+        es.tell(population, fitness_values)
+        bold_generation += 1
+        bold_eval_count += len(population)
+        print(
+            f"[BOLD] iter={bold_generation} evals={bold_eval_count}/{maxfevals} "
+            f"best_iter={float(np.min(fitness_values)):.6g} best_so_far={float(es.result.fbest):.6g}"
+        )
+
+    elapsed_s = time.perf_counter() - block_start
+    print(
+        f"[BOLD] Finished inner optimisation in {elapsed_s:.2f}s "
+        f"after {bold_generation} iterations and {bold_eval_count} evaluations."
+    )
+
+    return {
+        'best_vector': np.asarray(es.result.xbest, dtype=float),
+        'best_fitness': float(es.result.fbest),
+        'stop_reasons': es.stop(),
+    }
+
+
+def select_best_combined_elite(elite_records, bold_vector, *, fitness_config=None):
+    if not elite_records:
+        raise ValueError("At least one elite neural record is required to select a combined result.")
+
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    config.update(vector_to_bold_config(bold_vector))
+
+    best_payload = None
+    elite_fitnesses = []
+    for idx, record in enumerate(elite_records):
+        summary = summarise_simulation(record['simulation'], fitness_config=config)
+        fitness = fitness_from_summary(summary, fitness_config=config)
+        elite_fitnesses.append(float(fitness))
+        if best_payload is None or fitness < best_payload['fitness']:
+            best_payload = {
+                'elite_index': int(idx),
+                'fitness': float(fitness),
+                'neural_vector': np.asarray(record['vector'], dtype=float),
+                'neural_params': vector_to_plain_dict(record['vector']),
+                'bold_vector': np.asarray(bold_vector, dtype=float),
+                'bold_params': vector_to_bold_config(bold_vector),
+                'summary': summary,
+                'simulation': record['simulation'],
+            }
+
+    best_payload['elite_fitnesses'] = elite_fitnesses
+    return best_payload
 
 
 def append_generation_log(log_path, generation, population, fitness_values):
     best_index = int(np.argmin(fitness_values))
     best_vector = np.asarray(population[best_index], dtype=float)
+    best_neural_params, best_bold_params = joint_vector_to_plain_dicts(best_vector)
     record = {
         'generation': int(generation),
         'best_fitness': float(fitness_values[best_index]),
         'mean_fitness': float(np.mean(fitness_values)),
         'best_vector': best_vector.tolist(),
-        'best_params': vector_to_plain_dict(best_vector),
+        'best_params': best_neural_params,
+        'best_bold_params': best_bold_params,
     }
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps(record) + '\n')
 
 
-def write_final_summary(log_dir, result, stop_reasons):
+def export_best_fc_csvs(log_dir, best_vector, fitness_config=None):
+    config = FITNESS_CONFIG.copy()
+    config.update(fitness_config or {})
+    neural_vector, bold_vector = split_joint_parameter_vector(best_vector)
+    config.update(vector_to_bold_config(bold_vector))
+    simulation = run_simulation(
+        best_vector,
+        simulation_seed=_derive_simulation_seed(config.get('simulation_seed'), 2, 0),
+    )
+    summary = summarise_simulation(simulation, fitness_config=config)
+    if summary is None or 'seed_fc' not in summary or 'target_fc' not in summary:
+        return None
+
+    area_names = simulation['area_names']
+    seed_area = summary['seed_area']
+    seed_indices = [int(value) for value in summary.get('seed_indices', [])]
+    model_fc_z = np.asarray(summary['seed_fc'], dtype=float)
+    model_fc_r = np.asarray(summary.get('seed_fc_r'), dtype=float)
+    target_fc = np.asarray(summary['target_fc'], dtype=float)
+    valid_mask = np.asarray(summary.get('valid_mask'), dtype=bool)
+    diff = model_fc_z - target_fc
+    squared_error = diff ** 2
+
+    common_columns = {
+        'area_name': area_names,
+        'seed_area': [seed_area] * len(area_names),
+        'seed_indices': [','.join(str(value) for value in seed_indices)] * len(area_names),
+    }
+
+    seed_fc_path = log_dir / 'seed_fc.csv'
+    target_fc_path = log_dir / 'target_fc.csv'
+    comparison_path = log_dir / 'seed_vs_target_fc.csv'
+
+    pandas.DataFrame({
+        **common_columns,
+        'model_seed_fc_r': model_fc_r,
+        'model_seed_fc_z': model_fc_z,
+    }).to_csv(seed_fc_path, index=False)
+
+    pandas.DataFrame({
+        **common_columns,
+        'target_seed_fc_z': target_fc,
+    }).to_csv(target_fc_path, index=False)
+
+    pandas.DataFrame({
+        **common_columns,
+        'model_seed_fc_r': model_fc_r,
+        'model_seed_fc_z': model_fc_z,
+        'target_seed_fc_z': target_fc,
+        'difference': diff,
+        'squared_error': squared_error,
+        'valid': valid_mask,
+    }).to_csv(comparison_path, index=False)
+
+    return {
+        'seed_fc_csv': str(seed_fc_path),
+        'target_fc_csv': str(target_fc_path),
+        'seed_vs_target_fc_csv': str(comparison_path),
+    }
+
+
+def write_final_summary(
+    log_dir,
+    result,
+    stop_reasons,
+    *,
+    generation,
+    best_fitness_override=None,
+    initialised_from_summary=None,
+    exported_files=None,
+):
     best_vector = np.asarray(result.xbest, dtype=float)
+    best_params, best_bold_params = joint_vector_to_plain_dicts(best_vector)
     summary = {
-        'best_fitness': float(result.fbest),
+        'best_fitness': float(result.fbest) if best_fitness_override is None else float(best_fitness_override),
         'best_vector': best_vector.tolist(),
-        'best_params': vector_to_plain_dict(best_vector),
+        'best_params': best_params,
+        'best_bold_params': best_bold_params,
         'stop_reasons': stop_reasons,
+        'generations_completed': int(generation),
+        'initialised_from_summary': (
+            str(initialised_from_summary) if initialised_from_summary is not None else None
+        ),
+        'exported_files': exported_files or {},
     }
     with (log_dir / 'result_summary.json').open('w', encoding='utf-8') as handle:
         json.dump(summary, handle, indent=2)
@@ -1464,23 +2289,43 @@ def write_final_summary(log_dir, result, stop_reasons):
 
 def run_cmaes(
     *,
-    sigma0=20.0,
-    popsize=40,
-    maxfevals=2200,
+    sigma0=None,
+    popsize=None,
+    maxfevals=None,
     workers=None,
     ftarget=None,
     seed=None,
     log_dir='cmaes_logs',
     fitness_config=None,
+    start_from_summary=None,
 ):
     if cma is None:
         raise ImportError("The 'cma' package is required to run optimisation.")
+    default_sigma0 = 20.0
+    default_popsize = 12
+    default_maxfevals = 500
 
     log_dir = Path(log_dir)
     log_dir.mkdir(exist_ok=True)
-    save_default_params(log_dir / 'default_params.pck')
+    generation_log = log_dir / 'generations.jsonl'
+    sigma0 = default_sigma0 if sigma0 is None else float(sigma0)
+    popsize = default_popsize if popsize is None else int(popsize)
+    maxfevals = default_maxfevals if maxfevals is None else int(maxfevals)
 
-    x0 = initial_parameter_vector()
+    save_default_params(log_dir / 'default_params.pck')
+    if generation_log.exists():
+        generation_log.unlink()
+
+    start_summary = None
+    if start_from_summary is not None:
+        start_summary = load_result_summary(start_from_summary)
+
+    effective_fitness_config = FITNESS_CONFIG.copy()
+    effective_fitness_config.update(fitness_config or {})
+    if effective_fitness_config.get('simulation_seed') is None and seed is not None:
+        effective_fitness_config['simulation_seed'] = int(seed)
+
+    x0 = initial_parameter_vector() if start_summary is None else start_summary['joint_vector']
     cma_options = {
         'bounds': parameter_bounds(),
         'popsize': popsize,
@@ -1496,12 +2341,18 @@ def run_cmaes(
         cma_options['seed'] = int(seed)
 
     es = cma.CMAEvolutionStrategy(x0, sigma0, inopts=cma_options)
-    generation_log = log_dir / 'generations.jsonl'
     generation = 0
 
     while not es.stop():
         population = es.ask()
-        fitness_values = parallel_fitness(population, workers=workers, fitness_config=fitness_config)
+        generation_fitness_config = dict(effective_fitness_config)
+        generation_fitness_config['generation'] = generation
+        candidate_records = parallel_candidate_records(
+            population,
+            workers=workers,
+            fitness_config=generation_fitness_config,
+        )
+        fitness_values = [float(record['fitness']) for record in candidate_records]
         es.tell(population, fitness_values)
         es.logger.add()
         es.disp()
@@ -1516,31 +2367,115 @@ def run_cmaes(
         generation += 1
 
     best_vector = np.asarray(es.result.xbest, dtype=float)
-    best_fitness = float(es.result.fbest)
+    best_fitness = float(
+        evaluate_fitness(
+            best_vector,
+            fitness_config=effective_fitness_config,
+            simulation_seed=_derive_simulation_seed(
+                effective_fitness_config.get('simulation_seed'),
+                90,
+                generation,
+            ),
+        )
+    )
+    best_neural_params, best_bold_params = joint_vector_to_plain_dicts(best_vector)
     np.save(log_dir / 'best_params_final.npy', best_vector)
     np.save(log_dir / 'best_fitness_final.npy', np.array(best_fitness))
-    write_final_summary(log_dir, es.result, es.stop())
+    with (log_dir / 'best_bold_params_final.json').open('w', encoding='utf-8') as handle:
+        json.dump(best_bold_params, handle, indent=2)
+    np.save(log_dir / 'best_neural_params_final.npy', split_joint_parameter_vector(best_vector)[0])
+
+    exported_files = {
+        'best_bold_params_json': str(log_dir / 'best_bold_params_final.json'),
+        'best_neural_params_npy': str(log_dir / 'best_neural_params_final.npy'),
+    }
+    try:
+        exported = export_best_fc_csvs(
+            log_dir,
+            best_vector,
+            fitness_config=effective_fitness_config,
+        )
+        if exported is not None:
+            exported_files.update(exported)
+    except Exception as exc:
+        exported_files['fc_export_error'] = repr(exc)
+
+    simulation = run_simulation(
+        best_vector,
+        simulation_seed=_derive_simulation_seed(
+            effective_fitness_config.get('simulation_seed'),
+            91,
+            generation,
+        ),
+    )
+    if simulation is not None:
+        np.save(
+            log_dir / 'best_area_drive_abs_pA.npy',
+            np.asarray(simulation['area_drive_abs'] / brian2.pA, dtype=float),
+        )
+        exported_files['best_area_drive_abs_pA_npy'] = str(log_dir / 'best_area_drive_abs_pA.npy')
+
+    write_final_summary(
+        log_dir,
+        es.result,
+        es.stop(),
+        generation=generation,
+        best_fitness_override=best_fitness,
+        initialised_from_summary=None if start_summary is None else start_summary['path'],
+        exported_files=exported_files,
+    )
 
     print("Stop reasons:", es.stop())
     print("Best fitness:", best_fitness)
-    print("Best parameters:", vector_to_plain_dict(best_vector))
+    print("Best neural parameters:", best_neural_params)
+    print("Best BOLD parameters:", best_bold_params)
     return best_vector
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run CMA-ES for the OPT baseline model.')
-    parser.add_argument('--sigma0', type=float, default=20.0)
-    parser.add_argument('--popsize', type=int, default=40)
-    parser.add_argument('--maxfevals', type=int, default=2200)
+    # Command-line usage:
+    #   Fresh run with built-in defaults:
+    #     py -3 "Baseline 2.py"
+    #   Fresh run with explicit overrides:
+    #     py -3 "Baseline 2.py" --popsize 24 --maxfevals 1200 --log-dir "cmaes_logs/run_01"
+    #   Warm-start the joint neural+BOLD CMA-ES from a previous result summary:
+    #     py -3 "Baseline 2.py" --start-from-summary "cmaes_logs/run_01/result_summary.json"
+    parser.add_argument('--sigma0', type=float, default=None)
+    parser.add_argument('--popsize', type=int, default=None)
+    parser.add_argument('--maxfevals', type=int, default=None)
     parser.add_argument('--workers', type=int, default=None)
     parser.add_argument('--ftarget', type=float, default=None)
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--log-dir', default='cmaes_logs')
+    parser.add_argument('--start-from-summary', default=None)
+    parser.add_argument('--target-csv', default=None)
+    parser.add_argument('--target-column', default=None)
+    parser.add_argument('--seed-area', default=None)
+    parser.add_argument('--seed-idx', type=int, default=None)
+    parser.add_argument('--fc-distance', choices=('mse', 'rmse', 'mae', 'l2'), default=None)
+    parser.add_argument('--simulation-seed', type=int, default=None)
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    fitness_config = {}
+    if args.target_csv is not None:
+        fitness_config['target_csv'] = args.target_csv
+    if args.target_column is not None:
+        fitness_config['target_column'] = args.target_column
+    if args.seed_area is not None:
+        fitness_config['seed_area'] = args.seed_area
+    if args.seed_idx is not None:
+        fitness_config['seed_idx'] = args.seed_idx
+    if args.fc_distance is not None:
+        fitness_config['fc_distance'] = args.fc_distance
+    if args.simulation_seed is not None:
+        fitness_config['simulation_seed'] = args.simulation_seed
+    elif args.seed is not None:
+        fitness_config['simulation_seed'] = args.seed
+
     return run_cmaes(
         sigma0=args.sigma0,
         popsize=args.popsize,
@@ -1549,8 +2484,11 @@ def main():
         ftarget=args.ftarget,
         seed=args.seed,
         log_dir=args.log_dir,
+        fitness_config=fitness_config or None,
+        start_from_summary=args.start_from_summary,
     )
 
 
 if __name__ == '__main__':
+    # Entry point for terminal usage. Optionally warm-start from an earlier result_summary.json.
     main()

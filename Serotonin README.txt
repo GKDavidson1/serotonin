@@ -23,14 +23,45 @@ Background and STD_noise need to optimised!
 
 1282ms for FMRI
 
-if no dopamine does e_grad still exist
+
 
 consider setting ndma_da_grad to 1 : this removes the effect of dopamine
 
-std_noise needs to be optimised
-
-e_grad_min might need to be changed to fit to autocorrelations AND sln [e_grad_min is only free parameter]
-
 b1 changes the distribution of the weights in FLN
 
-e_grad_min -> worth investigating
+
+Bold Free Parameters
+	kappa
+	gamma
+	tau
+	alpha
+	E0
+
+
+
+e_grad_min: 0.15-0.25
+
+I_background_e: 140-620
+
+I_background_i: 120-300
+
+mu_ee: >1.3
+
+mu_ie:
+
+At egradmin: 0.235
+
+1.35 1.8 	+
+1.4  2.0-2.2 	+
+1.45 2.2 	++
+1.45 2.3	+
+1.5  2.4-2.6	+
+1.55 2.6-2.7	++
+1.55 2.8	+
+1.6  2.8	+?
+1.6  2.9 	+
+1.65 3.0	+?
+1.65 3.X	???
+
+
+
