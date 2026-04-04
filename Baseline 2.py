@@ -4,7 +4,6 @@ import argparse
 import json
 import multiprocessing as mp
 import pickle
-import time
 from pathlib import Path
 
 import numpy as np
@@ -152,11 +151,12 @@ PARAMS = {
 
     # background inputs
 
-          'I_background_e': 310 * brian2.pA, #default
-          # 'I_background_e': 155 * brian2.pA,
-          'I_background_i': 300 * brian2.pA, #default
-          # 'I_background_i': 180 * brian2.pA,
-          'I_background_dend': 30 * brian2.pA, #default
+          # 'I_background_e': 310 * brian2.pA, #default
+          'I_background_e': 306 * brian2.pA,
+          # 'I_background_i': 300 * brian2.pA, #default
+          'I_background_i': 280 * brian2.pA,
+          # 'I_background_dend': 30 * brian2.pA, #default
+          'I_background_dend': 24 * brian2.pA,
 
           # 'tau_noise': 2 * 8 * brian2.ms,
 
@@ -169,15 +169,15 @@ PARAMS = {
     #     'da_rel': 1.5, #default
           'da_rel': 0.5,
 
-          'std_noise': 8 * brian2.pA,
+          'std_noise': 4 * brian2.pA,
           # 'std_noise': 0.0 * brian2.pA,
 
-          'trial_length': 15 * brian2.second,
+          'trial_length': 25 * brian2.second,
         # Long-range connectivity strengths
         #   'mu_ee': 1.45, #default
-            'mu_ee': 1.55,
+            'mu_ee': 1.46,
         #   'mu_ie': 2.24, #default
-            'mu_ie': 2.6,
+            'mu_ie': 4.1,
 
 # Min excitatory gradient (spine count) value
 #           'e_grad_min': 0.45, #default
@@ -1324,6 +1324,8 @@ def drive_abs_to_balloon_input(
         return x, d0
 FAILURE_PENALTY = 1e9
 DEFAULT_FC_TARGET_CSV = Path(r'C:\Users\GlenA\Downloads\MB_NS_acc.left_subgraph_L.csv')
+CHECKPOINT_FILENAME = 'cmaes_state.pkl'
+CHECKPOINT_EVAL_INTERVAL = 10
 
 #TESTING HERE
 PARAMETER_SPACE = [
@@ -1336,9 +1338,9 @@ PARAMETER_SPACE = [
 ]
 
 BOLD_PARAMETER_SPACE = [
-    ('balloon_kappa', 0.10, 2.00, 0.04),
-    ('balloon_gamma', 0.05, 1.50, 0.03),
-    ('balloon_tau', 0.30, 2.50, 0.04),
+    ('balloon_kappa', 0.10, 2.00, 0.02),
+    ('balloon_gamma', 0.05, 1.50, 0.015),
+    ('balloon_tau', 0.30, 2.50, 0.02),
 ]
 
 FITNESS_CONFIG = {
@@ -1347,7 +1349,7 @@ FITNESS_CONFIG = {
     'seed_idx': None,
     'seed_area': None,
     'seed_areas': ['24c', '32'],
-    'fc_distance': 'mse',
+    'fc_distance': 'rmse',
     'fc_trim_seconds': 0.4,
     'fc_balloon_dt': 120 * brian2.ms,
     'fc_drive_gain': 1.0,
@@ -1531,6 +1533,78 @@ def save_default_params(path):
         pickle.dump(PARAMS, handle)
 
 
+def checkpoint_path_for_log_dir(log_dir):
+    return Path(log_dir) / CHECKPOINT_FILENAME
+
+
+def save_cmaes_state(
+    checkpoint_path,
+    *,
+    es,
+    generation,
+    fitness_config,
+    log_dir,
+    workers=None,
+    start_from_summary=None,
+    resumed_from_checkpoint=None,
+):
+    checkpoint_path = Path(checkpoint_path)
+    payload = {
+        'version': 1,
+        'es': es,
+        'generation': int(generation),
+        'countevals': int(es.countevals),
+        'fitness_config': dict(fitness_config or {}),
+        'log_dir': str(Path(log_dir).resolve()),
+        'workers': None if workers is None else int(workers),
+        'start_from_summary': None if start_from_summary is None else str(start_from_summary),
+        'resumed_from_checkpoint': (
+            None if resumed_from_checkpoint is None else str(resumed_from_checkpoint)
+        ),
+    }
+    with checkpoint_path.open('wb') as handle:
+        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return checkpoint_path
+
+
+def load_cmaes_state(checkpoint_path):
+    checkpoint_path = Path(checkpoint_path).expanduser().resolve()
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"CMA-ES checkpoint not found: {checkpoint_path}")
+
+    with checkpoint_path.open('rb') as handle:
+        payload = pickle.load(handle)
+
+    if not isinstance(payload, dict):
+        raise ValueError("CMA-ES checkpoint is not a valid payload.")
+
+    es = payload.get('es')
+    if es is None or not hasattr(es, 'N') or not hasattr(es, 'countevals'):
+        raise ValueError("CMA-ES checkpoint is missing a valid strategy object.")
+
+    expected_dim = len(initial_parameter_vector())
+    if int(es.N) != expected_dim:
+        raise ValueError(
+            f"CMA-ES checkpoint dimension {int(es.N)} does not match current model dimension {expected_dim}."
+        )
+
+    fitness_config = payload.get('fitness_config') or {}
+    if not isinstance(fitness_config, dict):
+        raise ValueError("CMA-ES checkpoint contains an invalid fitness_config payload.")
+
+    return {
+        'path': str(checkpoint_path),
+        'es': es,
+        'generation': int(payload.get('generation', 0)),
+        'countevals': int(es.countevals),
+        'fitness_config': dict(fitness_config),
+        'log_dir': str(payload.get('log_dir')) if payload.get('log_dir') is not None else None,
+        'workers': payload.get('workers'),
+        'start_from_summary': payload.get('start_from_summary'),
+        'resumed_from_checkpoint': payload.get('resumed_from_checkpoint'),
+    }
+
+
 def _mean_rate_in_window(rate, t, t_start, t_end):
     mask = (t >= t_start) & (t < t_end)
     if not np.any(mask):
@@ -1607,25 +1681,6 @@ def _balloon_kwargs_from_config(config):
         'neural_gain': float(config['balloon_neural_gain']),
         'max_step': float(config['balloon_max_step']),
     }
-
-
-def _aggregate_losses(losses, mode):
-    arr = np.asarray(losses, dtype=float)
-    if arr.size == 0:
-        return FAILURE_PENALTY
-    if mode == 'mean':
-        return float(np.mean(arr))
-    if mode == 'median':
-        return float(np.median(arr))
-    raise ValueError(f"Unsupported bold_aggregate mode: {mode}")
-
-
-def _normalise_neural_vector(vector):
-    lower, upper = parameter_bounds()
-    lower = np.asarray(lower, dtype=float)
-    upper = np.asarray(upper, dtype=float)
-    span = np.maximum(upper - lower, 1e-12)
-    return (np.asarray(vector, dtype=float) - lower) / span
 
 
 def _correlation_to_clipped_fisher_z(values, clip_value=2.0):
@@ -1883,9 +1938,6 @@ def evaluate_fitness(param_vector, fitness_config=None, simulation_seed=None):
     return fitness_from_summary(summary, fitness_config=config)
 
 
-EVALUATE_FITNESS_JOB = wrap_non_picklable_objects(evaluate_fitness)
-
-
 def evaluate_candidate_record(param_vector, fitness_config=None, simulation_seed=None):
     vector = np.asarray(param_vector, dtype=float)
     _, bold_vector = split_joint_parameter_vector(vector)
@@ -1915,27 +1967,6 @@ def evaluate_candidate_record(param_vector, fitness_config=None, simulation_seed
 EVALUATE_CANDIDATE_RECORD_JOB = wrap_non_picklable_objects(evaluate_candidate_record)
 
 
-def parallel_fitness(population, workers=None, fitness_config=None):
-    if workers is None:
-        workers = min(mp.cpu_count(), len(population))
-    config = FITNESS_CONFIG.copy()
-    config.update(fitness_config or {})
-    master_seed = config.get('simulation_seed')
-    generation = int(config.get('generation', 0))
-    simulation_seeds = [
-        _derive_simulation_seed(master_seed, 1, generation, idx)
-        for idx in range(len(population))
-    ]
-    return Parallel(n_jobs=workers, backend='loky')(
-        delayed(EVALUATE_FITNESS_JOB)(
-            candidate,
-            fitness_config=fitness_config,
-            simulation_seed=simulation_seeds[idx],
-        )
-        for idx, candidate in enumerate(population)
-    )
-
-
 def parallel_candidate_records(population, workers=None, fitness_config=None):
     if workers is None:
         workers = min(mp.cpu_count(), len(population))
@@ -1955,231 +1986,6 @@ def parallel_candidate_records(population, workers=None, fitness_config=None):
         )
         for idx, candidate in enumerate(population)
     )
-
-
-def select_diverse_neural_elites(candidate_records, count, *, min_distance=0.08):
-    ranked = sorted(
-        (
-            record for record in candidate_records
-            if record.get('simulation') is not None and np.isfinite(record.get('fitness', FAILURE_PENALTY))
-        ),
-        key=lambda record: float(record['fitness']),
-    )
-    if count <= 0 or not ranked:
-        return []
-
-    selected = []
-    selected_indices = set()
-    normalised = [_normalise_neural_vector(record['vector']) for record in ranked]
-
-    for idx, record in enumerate(ranked):
-        if not selected:
-            selected.append(record)
-            selected_indices.add(idx)
-            if len(selected) >= count:
-                return selected
-            continue
-
-        distances = [
-            float(np.linalg.norm(normalised[idx] - normalised[prev_idx]))
-            for prev_idx in selected_indices
-        ]
-        if all(distance >= float(min_distance) for distance in distances):
-            selected.append(record)
-            selected_indices.add(idx)
-            if len(selected) >= count:
-                return selected
-
-    for idx, record in enumerate(ranked):
-        if idx in selected_indices:
-            continue
-        selected.append(record)
-        selected_indices.add(idx)
-        if len(selected) >= count:
-            break
-
-    return selected
-
-
-def select_top_neural_elites(candidate_records, count):
-    ranked = sorted(
-        (
-            record for record in candidate_records
-            if record.get('simulation') is not None and np.isfinite(record.get('fitness', FAILURE_PENALTY))
-        ),
-        key=lambda record: float(record['fitness']),
-    )
-    return ranked[:max(0, int(count))]
-
-
-def update_top_neural_elite_archive(elite_records, candidate_records, count):
-    return select_top_neural_elites(list(elite_records) + list(candidate_records), count)
-
-
-def _jsonable_summary(summary):
-    if summary is None:
-        return None
-
-    payload = {}
-    for key, value in summary.items():
-        if isinstance(value, np.ndarray):
-            payload[key] = value.tolist()
-        elif isinstance(value, np.generic):
-            payload[key] = value.item()
-        else:
-            payload[key] = value
-    return payload
-
-
-def save_neural_elites(log_dir, elite_records):
-    log_dir = Path(log_dir)
-    elite_pickle_path = log_dir / 'neural_elites.pkl'
-    elite_manifest_path = log_dir / 'neural_elites_manifest.json'
-
-    with elite_pickle_path.open('wb') as handle:
-        pickle.dump(elite_records, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    manifest = []
-    for idx, record in enumerate(elite_records):
-        manifest.append({
-            'elite_index': int(idx),
-            'fitness': float(record['fitness']),
-            'vector': np.asarray(record['vector'], dtype=float).tolist(),
-            'params': vector_to_plain_dict(record['vector']),
-            'summary': _jsonable_summary(record.get('summary')),
-        })
-
-    with elite_manifest_path.open('w', encoding='utf-8') as handle:
-        json.dump(manifest, handle, indent=2)
-
-    return {
-        'neural_elites_pickle': str(elite_pickle_path),
-        'neural_elites_manifest': str(elite_manifest_path),
-    }
-
-
-def evaluate_bold_fitness_on_cached_drives(bold_vector, elite_records, *, fitness_config=None):
-    config = FITNESS_CONFIG.copy()
-    config.update(fitness_config or {})
-    config.update(vector_to_bold_config(bold_vector))
-
-    losses = []
-    for record in elite_records:
-        summary = summarise_simulation(record['simulation'], fitness_config=config)
-        losses.append(fitness_from_summary(summary, fitness_config=config))
-
-    return _aggregate_losses(losses, str(config.get('bold_aggregate', 'median')).lower())
-
-
-EVALUATE_BOLD_FITNESS_JOB = wrap_non_picklable_objects(evaluate_bold_fitness_on_cached_drives)
-
-
-def parallel_bold_fitness(population, elite_records, *, workers=None, fitness_config=None):
-    if workers is None:
-        workers = min(mp.cpu_count(), len(population))
-    return Parallel(n_jobs=workers, backend='loky')(
-        delayed(EVALUATE_BOLD_FITNESS_JOB)(
-            candidate,
-            elite_records,
-            fitness_config=fitness_config,
-        )
-        for candidate in population
-    )
-
-
-def run_bold_cmaes_on_elites(elite_records, *, fitness_config=None, seed=None, workers=None, x0=None):
-    if cma is None:
-        raise ImportError("The 'cma' package is required to run optimisation.")
-    if not elite_records:
-        raise ValueError("At least one elite neural record is required for BOLD optimisation.")
-
-    config = FITNESS_CONFIG.copy()
-    config.update(fitness_config or {})
-    sigma0 = float(config.get('bold_sigma0', 0.12))
-    popsize = int(config.get('bold_popsize', 8))
-    maxfevals = int(config.get('bold_maxfevals', 40))
-    if workers is None:
-        workers = min(mp.cpu_count(), popsize)
-    else:
-        workers = max(1, min(int(workers), popsize))
-
-    x0 = initial_bold_parameter_vector(config) if x0 is None else np.asarray(x0, dtype=float)
-    cma_options = {
-        'bounds': bold_parameter_bounds(),
-        'popsize': popsize,
-        'maxfevals': maxfevals,
-        'verb_log': 0,
-        'verb_disp': 0,
-        'CMA_stds': bold_sigma_vector(),
-    }
-    if seed is not None:
-        cma_options['seed'] = int(seed)
-
-    es = cma.CMAEvolutionStrategy(x0, sigma0, inopts=cma_options)
-    bold_generation = 0
-    bold_eval_count = 0
-    block_start = time.perf_counter()
-    print(
-        f"[BOLD] Starting inner optimisation: elites={len(elite_records)}, "
-        f"popsize={popsize}, maxfevals={maxfevals}, sigma0={sigma0:.4f}, workers={workers}"
-    )
-    while not es.stop():
-        population = es.ask()
-        fitness_values = parallel_bold_fitness(
-            population,
-            elite_records,
-            workers=workers,
-            fitness_config=config,
-        )
-        es.tell(population, fitness_values)
-        bold_generation += 1
-        bold_eval_count += len(population)
-        print(
-            f"[BOLD] iter={bold_generation} evals={bold_eval_count}/{maxfevals} "
-            f"best_iter={float(np.min(fitness_values)):.6g} best_so_far={float(es.result.fbest):.6g}"
-        )
-
-    elapsed_s = time.perf_counter() - block_start
-    print(
-        f"[BOLD] Finished inner optimisation in {elapsed_s:.2f}s "
-        f"after {bold_generation} iterations and {bold_eval_count} evaluations."
-    )
-
-    return {
-        'best_vector': np.asarray(es.result.xbest, dtype=float),
-        'best_fitness': float(es.result.fbest),
-        'stop_reasons': es.stop(),
-    }
-
-
-def select_best_combined_elite(elite_records, bold_vector, *, fitness_config=None):
-    if not elite_records:
-        raise ValueError("At least one elite neural record is required to select a combined result.")
-
-    config = FITNESS_CONFIG.copy()
-    config.update(fitness_config or {})
-    config.update(vector_to_bold_config(bold_vector))
-
-    best_payload = None
-    elite_fitnesses = []
-    for idx, record in enumerate(elite_records):
-        summary = summarise_simulation(record['simulation'], fitness_config=config)
-        fitness = fitness_from_summary(summary, fitness_config=config)
-        elite_fitnesses.append(float(fitness))
-        if best_payload is None or fitness < best_payload['fitness']:
-            best_payload = {
-                'elite_index': int(idx),
-                'fitness': float(fitness),
-                'neural_vector': np.asarray(record['vector'], dtype=float),
-                'neural_params': vector_to_plain_dict(record['vector']),
-                'bold_vector': np.asarray(bold_vector, dtype=float),
-                'bold_params': vector_to_bold_config(bold_vector),
-                'summary': summary,
-                'simulation': record['simulation'],
-            }
-
-    best_payload['elite_fitnesses'] = elite_fitnesses
-    return best_payload
 
 
 def append_generation_log(log_path, generation, population, fitness_values):
@@ -2267,6 +2073,7 @@ def write_final_summary(
     generation,
     best_fitness_override=None,
     initialised_from_summary=None,
+    initialised_from_checkpoint=None,
     exported_files=None,
 ):
     best_vector = np.asarray(result.xbest, dtype=float)
@@ -2280,6 +2087,9 @@ def write_final_summary(
         'generations_completed': int(generation),
         'initialised_from_summary': (
             str(initialised_from_summary) if initialised_from_summary is not None else None
+        ),
+        'initialised_from_checkpoint': (
+            str(initialised_from_checkpoint) if initialised_from_checkpoint is not None else None
         ),
         'exported_files': exported_files or {},
     }
@@ -2298,50 +2108,84 @@ def run_cmaes(
     log_dir='cmaes_logs',
     fitness_config=None,
     start_from_summary=None,
+    resume_state=None,
 ):
     if cma is None:
         raise ImportError("The 'cma' package is required to run optimisation.")
+    requested_sigma0 = sigma0
+    requested_popsize = popsize
+    requested_maxfevals = maxfevals
+    requested_ftarget = ftarget
     default_sigma0 = 20.0
     default_popsize = 12
-    default_maxfevals = 500
-
-    log_dir = Path(log_dir)
-    log_dir.mkdir(exist_ok=True)
-    generation_log = log_dir / 'generations.jsonl'
-    sigma0 = default_sigma0 if sigma0 is None else float(sigma0)
-    popsize = default_popsize if popsize is None else int(popsize)
-    maxfevals = default_maxfevals if maxfevals is None else int(maxfevals)
-
-    save_default_params(log_dir / 'default_params.pck')
-    if generation_log.exists():
-        generation_log.unlink()
+    default_maxfevals = 5500
 
     start_summary = None
-    if start_from_summary is not None:
-        start_summary = load_result_summary(start_from_summary)
+    resume_payload = None
+    if resume_state is not None:
+        if start_from_summary is not None:
+            raise ValueError("Use either resume_state or start_from_summary, not both.")
+        if fitness_config:
+            raise ValueError("Cannot override fitness_config when resuming from a saved CMA-ES state.")
 
-    effective_fitness_config = FITNESS_CONFIG.copy()
-    effective_fitness_config.update(fitness_config or {})
-    if effective_fitness_config.get('simulation_seed') is None and seed is not None:
-        effective_fitness_config['simulation_seed'] = int(seed)
+        resume_payload = load_cmaes_state(resume_state)
+        log_dir_value = resume_payload.get('log_dir') or log_dir
+        log_dir = Path(log_dir_value)
+        generation_log = log_dir / 'generations.jsonl'
+        effective_fitness_config = dict(resume_payload['fitness_config'])
+        workers = resume_payload.get('workers') if workers is None else int(workers)
+        es = resume_payload['es']
+        generation = int(resume_payload['generation'])
+        if requested_maxfevals is not None:
+            es.opts['maxfevals'] = int(requested_maxfevals)
+            if hasattr(es, '_stopdict'):
+                es._stopdict.clear()
+        if requested_ftarget is not None:
+            es.opts['ftarget'] = float(requested_ftarget)
+            if hasattr(es, '_stopdict'):
+                es._stopdict.clear()
+        initialised_from_checkpoint = resume_payload['path']
+    else:
+        sigma0 = default_sigma0 if requested_sigma0 is None else float(requested_sigma0)
+        popsize = default_popsize if requested_popsize is None else int(requested_popsize)
+        maxfevals = default_maxfevals if requested_maxfevals is None else int(requested_maxfevals)
+        log_dir = Path(log_dir)
+        generation_log = log_dir / 'generations.jsonl'
+        if start_from_summary is not None:
+            start_summary = load_result_summary(start_from_summary)
 
-    x0 = initial_parameter_vector() if start_summary is None else start_summary['joint_vector']
-    cma_options = {
-        'bounds': parameter_bounds(),
-        'popsize': popsize,
-        'maxfevals': maxfevals,
-        'verb_log': 1,
-        'verb_disp': 1,
-        'CMA_stds': sigma_vector(),
-        'verb_filenameprefix': str(log_dir / 'outcmaes'),
-    }
-    if ftarget is not None:
-        cma_options['ftarget'] = float(ftarget)
-    if seed is not None:
-        cma_options['seed'] = int(seed)
+        effective_fitness_config = FITNESS_CONFIG.copy()
+        effective_fitness_config.update(fitness_config or {})
+        if effective_fitness_config.get('simulation_seed') is None and seed is not None:
+            effective_fitness_config['simulation_seed'] = int(seed)
 
-    es = cma.CMAEvolutionStrategy(x0, sigma0, inopts=cma_options)
-    generation = 0
+        x0 = initial_parameter_vector() if start_summary is None else start_summary['joint_vector']
+        cma_options = {
+            'bounds': parameter_bounds(),
+            'popsize': popsize,
+            'maxfevals': maxfevals,
+            'verb_log': 1,
+            'verb_disp': 1,
+            'CMA_stds': sigma_vector(),
+            'verb_filenameprefix': str(log_dir / 'outcmaes'),
+        }
+        if requested_ftarget is not None:
+            cma_options['ftarget'] = float(requested_ftarget)
+        if seed is not None:
+            cma_options['seed'] = int(seed)
+
+        es = cma.CMAEvolutionStrategy(x0, sigma0, inopts=cma_options)
+        generation = 0
+        initialised_from_checkpoint = None
+
+    log_dir.mkdir(exist_ok=True)
+    checkpoint_path = checkpoint_path_for_log_dir(log_dir)
+    save_default_params(log_dir / 'default_params.pck')
+    if resume_payload is None and generation_log.exists():
+        generation_log.unlink()
+    last_checkpoint_eval = (
+        int(resume_payload['countevals']) if resume_payload is not None else 0
+    )
 
     while not es.stop():
         population = es.ask()
@@ -2365,6 +2209,18 @@ def run_cmaes(
         np.save(log_dir / 'best_fitness_so_far.npy', np.array(best_fitness))
         append_generation_log(generation_log, generation, population, fitness_values)
         generation += 1
+        if es.countevals - last_checkpoint_eval >= CHECKPOINT_EVAL_INTERVAL:
+            save_cmaes_state(
+                checkpoint_path,
+                es=es,
+                generation=generation,
+                fitness_config=effective_fitness_config,
+                log_dir=log_dir,
+                workers=workers,
+                start_from_summary=None if start_summary is None else start_summary['path'],
+                resumed_from_checkpoint=initialised_from_checkpoint,
+            )
+            last_checkpoint_eval = int(es.countevals)
 
     best_vector = np.asarray(es.result.xbest, dtype=float)
     best_fitness = float(
@@ -2389,6 +2245,17 @@ def run_cmaes(
         'best_bold_params_json': str(log_dir / 'best_bold_params_final.json'),
         'best_neural_params_npy': str(log_dir / 'best_neural_params_final.npy'),
     }
+    final_checkpoint = save_cmaes_state(
+        checkpoint_path,
+        es=es,
+        generation=generation,
+        fitness_config=effective_fitness_config,
+        log_dir=log_dir,
+        workers=workers,
+        start_from_summary=None if start_summary is None else start_summary['path'],
+        resumed_from_checkpoint=initialised_from_checkpoint,
+    )
+    exported_files['cmaes_state_pickle'] = str(final_checkpoint)
     try:
         exported = export_best_fc_csvs(
             log_dir,
@@ -2422,6 +2289,7 @@ def run_cmaes(
         generation=generation,
         best_fitness_override=best_fitness,
         initialised_from_summary=None if start_summary is None else start_summary['path'],
+        initialised_from_checkpoint=initialised_from_checkpoint,
         exported_files=exported_files,
     )
 
@@ -2441,6 +2309,8 @@ def parse_args():
     #     py -3 "Baseline 2.py" --popsize 24 --maxfevals 1200 --log-dir "cmaes_logs/run_01"
     #   Warm-start the joint neural+BOLD CMA-ES from a previous result summary:
     #     py -3 "Baseline 2.py" --start-from-summary "cmaes_logs/run_01/result_summary.json"
+    #   Resume an interrupted CMA-ES run from a saved optimiser checkpoint:
+    #     py -3 "Baseline 2.py" --resume-state "cmaes_logs/run_01/cmaes_state.pkl" --maxfevals 1200
     parser.add_argument('--sigma0', type=float, default=None)
     parser.add_argument('--popsize', type=int, default=None)
     parser.add_argument('--maxfevals', type=int, default=None)
@@ -2449,6 +2319,7 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--log-dir', default='cmaes_logs')
     parser.add_argument('--start-from-summary', default=None)
+    parser.add_argument('--resume-state', default=None)
     parser.add_argument('--target-csv', default=None)
     parser.add_argument('--target-column', default=None)
     parser.add_argument('--seed-area', default=None)
@@ -2486,9 +2357,33 @@ def main():
         log_dir=args.log_dir,
         fitness_config=fitness_config or None,
         start_from_summary=args.start_from_summary,
+        resume_state=args.resume_state,
     )
 
 
 if __name__ == '__main__':
-    # Entry point for terminal usage. Optionally warm-start from an earlier result_summary.json.
+    # Command-line usage from PowerShell / cmd:
+    #   py -3 "D:\New folder\serotonin\Baseline 2.py"
+    #   py -3 "D:\New folder\serotonin\Baseline 2.py" --popsize 24 --maxfevals 1200 --workers 8
+    #   py -3 "D:\New folder\serotonin\Baseline 2.py" --log-dir "cmaes_logs\run_01"
+    #   py -3 "D:\New folder\serotonin\Baseline 2.py" --resume-state "cmaes_logs\run_01\cmaes_state.pkl" --maxfevals 1200
+    #   py -3 "D:\New folder\serotonin\Baseline 2.py" --start-from-summary "cmaes_logs\run_01\result_summary.json"
+    #
+    # Optional CLI flags:
+    #   --sigma0 FLOAT              Global CMA-ES step size used when creating a fresh run.
+    #   --popsize INT               CMA-ES population size.
+    #   --maxfevals INT             Maximum total fitness evaluations.
+    #   --workers INT               Parallel worker count for candidate evaluation.
+    #   --ftarget FLOAT             Stop early if fitness reaches this target.
+    #   --seed INT                  CMA-ES random seed; also used as the default simulation seed.
+    #   --log-dir PATH              Output directory for logs, checkpoints, and result files.
+    #   --start-from-summary PATH   Start a fresh CMA-ES run from a previous result_summary.json best vector.
+    #   --resume-state PATH         Resume a previously checkpointed CMA-ES optimiser state (.pkl).
+    #   --target-csv PATH           CSV file containing the empirical FC target.
+    #   --target-column NAME        Column name to read from --target-csv.
+    #   --seed-area NAME            Single model area to use as the FC seed.
+    #   --seed-idx INT              Single model area index to use as the FC seed.
+    #   --fc-distance {mse,rmse,mae,l2}
+    #                               Loss metric used to compare model FC against target FC.
+    #   --simulation-seed INT       Simulation RNG seed override for reproducible fitness evaluation.
     main()
