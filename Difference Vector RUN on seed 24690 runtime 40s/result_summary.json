@@ -1,0 +1,61 @@
+{
+  "best_fitness": 0.5046634196211769,
+  "best_vector": [
+    0.8999998357749727,
+    1.2230907775042112,
+    0.26861606580594355,
+    499.9501075096458,
+    190.96348697302088,
+    34.613449478593616,
+    -158.0557605981829,
+    -153.60602592281026,
+    -221.04769286954496
+  ],
+  "best_free_params": {
+    "seed_a_e": 0.8999998357749727,
+    "seed_b_e": 1.2230907775042112,
+    "seed_d_e": 0.26861606580594355,
+    "seed_c_I_sst": 499.9501075096458,
+    "seed_c_I_vip": 190.96348697302088,
+    "seed_c_I_pv": 34.613449478593616,
+    "seed_r_0_sst": -158.0557605981829,
+    "seed_r_0_vip": -153.60602592281026,
+    "seed_r_0_pv": -221.04769286954496
+  },
+  "best_params": {
+    "I_background_e": 418.25670506356596,
+    "I_background_i": 330.0387098744568,
+    "I_background_dend": 32.47836011958004,
+    "mu_ee": 0.5182280847339835,
+    "mu_ie": 5.994963250260545,
+    "e_grad_min": 0.4494572592774458
+  },
+  "best_bold_params": {
+    "balloon_kappa": 0.10056764869973893,
+    "balloon_gamma": 0.2109734158911068,
+    "balloon_tau": 2.4971317426222392
+  },
+  "stop_reasons": {
+    "maxfevals": 1300
+  },
+  "generations_completed": 109,
+  "best_difference_vector_r": 0.4953365803788231,
+  "best_difference_vector_fitness": 0.5046634196211769,
+  "reevaluated_fitness": 0.5046634196211769,
+  "reevaluated_difference_vector_r": 0.4953365803788231,
+  "reevaluated_difference_vector_fitness": 0.5046634196211769,
+  "final_evaluation_seed": 24690,
+  "initialised_from_summary": null,
+  "initialised_from_checkpoint": null,
+  "reference_summary": "D:\\New folder\\serotonin\\SEEDED LOGS\\run_002_seed_24690_20260408_011332\\result_summary.json",
+  "reference_seed_vs_target_csv": "D:\\New folder\\serotonin\\SEEDED LOGS\\run_002_seed_24690_20260408_011332\\seed_vs_target_fc.csv",
+  "exported_files": {
+    "best_free_neural_params_npy": "cmaes_logs_difference_vectors\\best_free_neural_params_final.npy",
+    "cmaes_state_pickle": "cmaes_logs_difference_vectors\\cmaes_state.pkl",
+    "model_5ht_seed_fc_csv": "cmaes_logs_difference_vectors\\model_5ht_seed_fc.csv",
+    "target_5ht_fc_csv": "cmaes_logs_difference_vectors\\target_5ht_fc.csv",
+    "model_vs_5ht_target_fc_csv": "cmaes_logs_difference_vectors\\model_vs_5ht_target_fc.csv",
+    "difference_vectors_csv": "cmaes_logs_difference_vectors\\difference_vectors.csv",
+    "best_area_drive_abs_pA_npy": "cmaes_logs_difference_vectors\\best_area_drive_abs_pA.npy"
+  }
+}

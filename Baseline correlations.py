@@ -28,6 +28,7 @@ _FC_TARGET_CACHE = {}
 
 PARAMS = {
     # local connectivity strengths
+
           # local strengths E-->
           'g_e_self': 0.18 * brian2.nA,
           'g_e_cross': 0 * brian2.nA,
@@ -172,7 +173,7 @@ PARAMS = {
           'std_noise': 4 * brian2.pA,
           # 'std_noise': 0.0 * brian2.pA,
 
-          'trial_length': 25 * brian2.second,
+          'trial_length': 40 * brian2.second,
         # Long-range connectivity strengths
         #   'mu_ee': 1.45, #default
             'mu_ee': 1.46,
@@ -1335,6 +1336,7 @@ PARAMETER_SPACE = [
     ('mu_ee', 0.5, 6.0, None, 0.03, float(PARAMS['mu_ee'])),
     ('mu_ie', 0.5, 6.0, None, 0.03, float(PARAMS['mu_ie'])),
     ('e_grad_min', 0.1, 0.45, None, 0.005, float(PARAMS['e_grad_min'])),
+    ('da_rel', 0.4, 1.5, None, 0.01, float(PARAMS['da_rel'])),
 ]
 
 BOLD_PARAMETER_SPACE = [
@@ -1350,11 +1352,11 @@ FITNESS_CONFIG = {
     'seed_area': None,
     'seed_areas': ['24c', '32'],
     'fc_distance': 'pearson',
-    'fc_trim_seconds': 0.4,
-    'fc_balloon_dt': 120 * brian2.ms,
+    'fc_trim_seconds': 2.0,
+    'fc_balloon_dt': 100 * brian2.ms,
     'fc_drive_gain': 1.0,
-    'fc_baseline_start_seconds': 3.0,
-    'fc_baseline_end_seconds': 20.0,
+    'fc_baseline_start_seconds': 5.0,
+    'fc_baseline_end_seconds': 40.0,
     'fc_balloon_gain': 0.025,
     'fc_clamp_nonnegative': False,
     'fc_fisher_z_clip': 2.0,
@@ -1745,6 +1747,20 @@ def align_target_fc(target_spec, area_names):
     return np.array([value_by_area[area_name] for area_name in area_names], dtype=float)
 
 
+def _pearson_from_valid_fc(model_fc_z, target_fc_z, valid_mask):
+    valid_mask = np.asarray(valid_mask, dtype=bool)
+    if not np.any(valid_mask):
+        return np.nan
+
+    model_fc_z = np.asarray(model_fc_z, dtype=float)[valid_mask]
+    target_fc_z = np.asarray(target_fc_z, dtype=float)[valid_mask]
+    if model_fc_z.size < 2:
+        return np.nan
+
+    pearson_r = np.corrcoef(model_fc_z, target_fc_z)[0, 1]
+    return float(pearson_r) if np.isfinite(pearson_r) else np.nan
+
+
 def compute_seed_fc_from_drive(area_drive_abs, params_run, area_names, *, fitness_config):
     config = FITNESS_CONFIG.copy()
     config.update(fitness_config or {})
@@ -1874,6 +1890,9 @@ def summarise_simulation(simulation, fitness_config=None):
     if not np.any(valid_mask):
         return None
 
+    pearson_r = _pearson_from_valid_fc(model_fc_z, target_fc_z, valid_mask)
+    pearson_fitness = 1.0 - pearson_r if np.isfinite(pearson_r) else FAILURE_PENALTY
+
     return {
         'target_fc': target_fc_z,
         'seed_fc': model_fc_z,
@@ -1890,6 +1909,8 @@ def summarise_simulation(simulation, fitness_config=None):
         'fc_target_column': target_spec['value_column'],
         'fc_target_path': target_spec['path'],
         'dt_balloon_s': model_fc['dt_balloon_s'],
+        'pearson_r': float(pearson_r) if np.isfinite(pearson_r) else None,
+        'pearson_fitness': float(pearson_fitness) if np.isfinite(pearson_fitness) else float(FAILURE_PENALTY),
     }
 
 
@@ -1911,9 +1932,11 @@ def fitness_from_summary(summary, fitness_config=None):
     diff = model_fc_z - target_fc_z
     metric = str(config.get('fc_distance', 'mse')).lower()
     if metric == 'pearson':
-        if model_fc_z.size < 2:
+        pearson_r = summary.get('pearson_r')
+        if pearson_r is None:
+            pearson_r = _pearson_from_valid_fc(summary['seed_fc'], summary['target_fc'], valid_mask)
+        if not np.isfinite(pearson_r):
             return FAILURE_PENALTY
-        pearson_r = np.corrcoef(model_fc_z, target_fc_z)[0, 1]
         fitness = 1.0 - pearson_r
     elif metric == 'mse':
         fitness = np.mean(diff ** 2)
@@ -1985,7 +2008,7 @@ def parallel_candidate_records(population, workers=None, fitness_config=None):
         _derive_simulation_seed(master_seed, 1, generation, idx)
         for idx in range(len(population))
     ]
-    return Parallel(n_jobs=workers, backend='loky')(
+    records = Parallel(n_jobs=workers, backend='loky')(
         delayed(EVALUATE_CANDIDATE_RECORD_JOB)(
             candidate,
             fitness_config=fitness_config,
@@ -1993,6 +2016,9 @@ def parallel_candidate_records(population, workers=None, fitness_config=None):
         )
         for idx, candidate in enumerate(population)
     )
+    for idx, record in enumerate(records):
+        record['simulation_seed'] = simulation_seeds[idx]
+    return records
 
 
 def append_generation_log(log_path, generation, population, fitness_values):
@@ -2011,16 +2037,18 @@ def append_generation_log(log_path, generation, population, fitness_values):
         handle.write(json.dumps(record) + '\n')
 
 
-def export_best_fc_csvs(log_dir, best_vector, fitness_config=None):
+def export_best_fc_csvs(log_dir, best_vector, fitness_config=None, *, simulation=None, summary=None):
     config = FITNESS_CONFIG.copy()
     config.update(fitness_config or {})
-    neural_vector, bold_vector = split_joint_parameter_vector(best_vector)
+    _, bold_vector = split_joint_parameter_vector(best_vector)
     config.update(vector_to_bold_config(bold_vector))
-    simulation = run_simulation(
-        best_vector,
-        simulation_seed=_derive_simulation_seed(config.get('simulation_seed'), 2, 0),
-    )
-    summary = summarise_simulation(simulation, fitness_config=config)
+    if simulation is None:
+        simulation = run_simulation(
+            best_vector,
+            simulation_seed=_derive_simulation_seed(config.get('simulation_seed'), 2, 0),
+        )
+    if summary is None and simulation is not None:
+        summary = summarise_simulation(simulation, fitness_config=config)
     if summary is None or 'seed_fc' not in summary or 'target_fc' not in summary:
         return None
 
@@ -2079,6 +2107,12 @@ def write_final_summary(
     *,
     generation,
     best_fitness_override=None,
+    best_pearson_r=None,
+    best_pearson_fitness=None,
+    reevaluated_fitness=None,
+    reevaluated_pearson_r=None,
+    reevaluated_pearson_fitness=None,
+    final_evaluation_seed=None,
     initialised_from_summary=None,
     initialised_from_checkpoint=None,
     exported_files=None,
@@ -2092,6 +2126,14 @@ def write_final_summary(
         'best_bold_params': best_bold_params,
         'stop_reasons': stop_reasons,
         'generations_completed': int(generation),
+        'best_pearson_r': None if best_pearson_r is None else float(best_pearson_r),
+        'best_pearson_fitness': None if best_pearson_fitness is None else float(best_pearson_fitness),
+        'reevaluated_fitness': None if reevaluated_fitness is None else float(reevaluated_fitness),
+        'reevaluated_pearson_r': None if reevaluated_pearson_r is None else float(reevaluated_pearson_r),
+        'reevaluated_pearson_fitness': (
+            None if reevaluated_pearson_fitness is None else float(reevaluated_pearson_fitness)
+        ),
+        'final_evaluation_seed': None if final_evaluation_seed is None else int(final_evaluation_seed),
         'initialised_from_summary': (
             str(initialised_from_summary) if initialised_from_summary is not None else None
         ),
@@ -2125,7 +2167,7 @@ def run_cmaes(
     requested_ftarget = ftarget
     default_sigma0 = 20.0
     default_popsize = 12
-    default_maxfevals = 2000
+    default_maxfevals = 400
 
     start_summary = None
     resume_payload = None
@@ -2163,7 +2205,9 @@ def run_cmaes(
 
         effective_fitness_config = FITNESS_CONFIG.copy()
         effective_fitness_config.update(fitness_config or {})
-        if effective_fitness_config.get('simulation_seed') is None and seed is not None:
+        if seed is None:
+            seed = int(np.random.SeedSequence().generate_state(1, dtype=np.uint32)[0])
+        if effective_fitness_config.get('simulation_seed') is None:
             effective_fitness_config['simulation_seed'] = int(seed)
 
         x0 = initial_parameter_vector() if start_summary is None else start_summary['joint_vector']
@@ -2175,11 +2219,10 @@ def run_cmaes(
             'verb_disp': 1,
             'CMA_stds': sigma_vector(),
             'verb_filenameprefix': str(log_dir / 'outcmaes'),
+            'seed': int(seed),
         }
         if requested_ftarget is not None:
             cma_options['ftarget'] = float(requested_ftarget)
-        if seed is not None:
-            cma_options['seed'] = int(seed)
 
         es = cma.CMAEvolutionStrategy(x0, sigma0, inopts=cma_options)
         generation = 0
@@ -2193,6 +2236,8 @@ def run_cmaes(
     last_checkpoint_eval = (
         int(resume_payload['countevals']) if resume_payload is not None else 0
     )
+    best_observed_record = None
+    best_observed_fitness = float(es.result.fbest) if np.isfinite(getattr(es.result, 'fbest', np.nan)) else np.inf
 
     while not es.stop():
         population = es.ask()
@@ -2211,6 +2256,9 @@ def run_cmaes(
         best_index = int(np.argmin(fitness_values))
         best_vector = np.asarray(population[best_index], dtype=float)
         best_fitness = float(fitness_values[best_index])
+        if best_fitness < best_observed_fitness:
+            best_observed_fitness = best_fitness
+            best_observed_record = candidate_records[best_index]
 
         np.save(log_dir / 'best_params_so_far.npy', best_vector)
         np.save(log_dir / 'best_fitness_so_far.npy', np.array(best_fitness))
@@ -2230,17 +2278,25 @@ def run_cmaes(
             last_checkpoint_eval = int(es.countevals)
 
     best_vector = np.asarray(es.result.xbest, dtype=float)
-    best_fitness = float(
-        evaluate_fitness(
-            best_vector,
-            fitness_config=effective_fitness_config,
-            simulation_seed=_derive_simulation_seed(
-                effective_fitness_config.get('simulation_seed'),
-                90,
-                generation,
-            ),
-        )
+    final_evaluation_seed = _derive_simulation_seed(
+        effective_fitness_config.get('simulation_seed'),
+        90,
+        generation,
     )
+    final_record = evaluate_candidate_record(
+        best_vector,
+        fitness_config=effective_fitness_config,
+        simulation_seed=final_evaluation_seed,
+    )
+    reevaluated_fitness = float(final_record['fitness'])
+    final_simulation = final_record.get('simulation')
+    final_summary = final_record.get('summary')
+    reevaluated_pearson_r = None if final_summary is None else final_summary.get('pearson_r')
+    reevaluated_pearson_fitness = None if final_summary is None else final_summary.get('pearson_fitness')
+    observed_summary = None if best_observed_record is None else best_observed_record.get('summary')
+    best_pearson_r = None if observed_summary is None else observed_summary.get('pearson_r')
+    best_pearson_fitness = None if observed_summary is None else observed_summary.get('pearson_fitness')
+    best_fitness = float(es.result.fbest)
     best_neural_params, best_bold_params = joint_vector_to_plain_dicts(best_vector)
     np.save(log_dir / 'best_params_final.npy', best_vector)
     np.save(log_dir / 'best_fitness_final.npy', np.array(best_fitness))
@@ -2268,24 +2324,18 @@ def run_cmaes(
             log_dir,
             best_vector,
             fitness_config=effective_fitness_config,
+            simulation=final_simulation,
+            summary=final_summary,
         )
         if exported is not None:
             exported_files.update(exported)
     except Exception as exc:
         exported_files['fc_export_error'] = repr(exc)
 
-    simulation = run_simulation(
-        best_vector,
-        simulation_seed=_derive_simulation_seed(
-            effective_fitness_config.get('simulation_seed'),
-            91,
-            generation,
-        ),
-    )
-    if simulation is not None:
+    if final_simulation is not None:
         np.save(
             log_dir / 'best_area_drive_abs_pA.npy',
-            np.asarray(simulation['area_drive_abs'] / brian2.pA, dtype=float),
+            np.asarray(final_simulation['area_drive_abs'] / brian2.pA, dtype=float),
         )
         exported_files['best_area_drive_abs_pA_npy'] = str(log_dir / 'best_area_drive_abs_pA.npy')
 
@@ -2295,6 +2345,12 @@ def run_cmaes(
         es.stop(),
         generation=generation,
         best_fitness_override=best_fitness,
+        best_pearson_r=best_pearson_r,
+        best_pearson_fitness=best_pearson_fitness,
+        reevaluated_fitness=reevaluated_fitness,
+        reevaluated_pearson_r=reevaluated_pearson_r,
+        reevaluated_pearson_fitness=reevaluated_pearson_fitness,
+        final_evaluation_seed=final_evaluation_seed,
         initialised_from_summary=None if start_summary is None else start_summary['path'],
         initialised_from_checkpoint=initialised_from_checkpoint,
         exported_files=exported_files,
@@ -2302,6 +2358,13 @@ def run_cmaes(
 
     print("Stop reasons:", es.stop())
     print("Best fitness:", best_fitness)
+    if best_pearson_r is not None:
+        print("Best Pearson r:", float(best_pearson_r))
+        print("Best Pearson fitness (1-r):", float(best_pearson_fitness))
+    print("Reevaluated fitness:", reevaluated_fitness)
+    if reevaluated_pearson_r is not None:
+        print("Reevaluated Pearson r:", float(reevaluated_pearson_r))
+        print("Reevaluated Pearson fitness (1-r):", float(reevaluated_pearson_fitness))
     print("Best neural parameters:", best_neural_params)
     print("Best BOLD parameters:", best_bold_params)
     return best_vector

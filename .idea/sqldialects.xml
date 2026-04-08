@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/Difference Vector RUN on seed 12345 runtime 40seconds/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x1/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x10/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x2/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x3/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x4/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x5/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x6/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x7/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x8/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x9/default_params.pck" dialect="GenericSQL" />
+  </component>
+</project>

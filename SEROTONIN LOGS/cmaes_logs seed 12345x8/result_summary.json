@@ -1,0 +1,48 @@
+{
+  "best_fitness": 0.3665660909910111,
+  "best_vector": [
+    312.8908161973265,
+    284.4269946567735,
+    17.16881298689255,
+    2.2655386568436233,
+    3.1755467425222377,
+    0.26021249859179385,
+    0.698190477008827,
+    0.46283183051185256,
+    0.5532228336483108
+  ],
+  "best_params": {
+    "I_background_e": 312.8908161973265,
+    "I_background_i": 284.4269946567735,
+    "I_background_dend": 17.16881298689255,
+    "mu_ee": 2.2655386568436233,
+    "mu_ie": 3.1755467425222377,
+    "e_grad_min": 0.26021249859179385
+  },
+  "best_bold_params": {
+    "balloon_kappa": 0.698190477008827,
+    "balloon_gamma": 0.46283183051185256,
+    "balloon_tau": 0.5532228336483108
+  },
+  "stop_reasons": {
+    "maxfevals": 400
+  },
+  "generations_completed": 34,
+  "best_pearson_r": 0.6334339090089889,
+  "best_pearson_fitness": 0.3665660909910111,
+  "reevaluated_fitness": 0.3665660909910111,
+  "reevaluated_pearson_r": 0.6334339090089889,
+  "reevaluated_pearson_fitness": 0.3665660909910111,
+  "final_evaluation_seed": 98760,
+  "initialised_from_summary": null,
+  "initialised_from_checkpoint": null,
+  "exported_files": {
+    "best_bold_params_json": "cmaes_logs\\best_bold_params_final.json",
+    "best_neural_params_npy": "cmaes_logs\\best_neural_params_final.npy",
+    "cmaes_state_pickle": "cmaes_logs\\cmaes_state.pkl",
+    "seed_fc_csv": "cmaes_logs\\seed_fc.csv",
+    "target_fc_csv": "cmaes_logs\\target_fc.csv",
+    "seed_vs_target_fc_csv": "cmaes_logs\\seed_vs_target_fc.csv",
+    "best_area_drive_abs_pA_npy": "cmaes_logs\\best_area_drive_abs_pA.npy"
+  }
+}

@@ -189,9 +189,9 @@ PARAMS = {
 
 def current_to_frequency(input_current,population_type,parameters):
     if population_type == 'E':
-        a = parameters['a_e']
-        b = parameters['b_e']
-        d = parameters['d_e']
+        a = parameters['a_e'] #slope
+        b = parameters['b_e'] #threshold
+        d = parameters['d_e'] #curvature
         return np.divide((a*input_current - b),(1 - np.exp(-d*(a*input_current - b))))
     if population_type == 'PV':
         c_I = parameters['c_I_pv']
