@@ -28,11 +28,19 @@ _REFERENCE_SUMMARY_CACHE = {}
 _REFERENCE_RESIDUAL_CACHE = {}
 DEFAULT_REFERENCE_SUMMARY = Path(
     # r'D:\New folder\serotonin\SEEDED LOGS\run_001_seed_12345_20260408_003506\result_summary.json'
-    r'D:\New folder\serotonin\SEEDED LOGS\run_002_seed_24690_20260408_011332\result_summary.json'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_002_seed_24690_20260408_011332\result_summary.json'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_003_seed_37035_20260408_015156\result_summary.json'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_004_seed_49380_20260408_023023\result_summary.json'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_005_seed_61725_20260408_030856\result_summary.json'
+    r'D:\New folder\serotonin\SEEDED LOGS\run_006_seed_74070_20260408_034723\result_summary.json'
 )
 DEFAULT_REFERENCE_SEED_VS_TARGET_CSV = Path(
     # r'D:\New folder\serotonin\SEEDED LOGS\run_001_seed_12345_20260408_003506\seed_vs_target_fc.csv'
-    r'D:\New folder\serotonin\SEEDED LOGS\run_002_seed_24690_20260408_011332\seed_vs_target_fc.csv'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_002_seed_24690_20260408_011332\seed_vs_target_fc.csv'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_003_seed_37035_20260408_015156\seed_vs_target_fc.csv'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_004_seed_49380_20260408_023023\seed_vs_target_fc.csv'
+    # r'D:\New folder\serotonin\SEEDED LOGS\run_005_seed_61725_20260408_030856\seed_vs_target_fc.csv'
+    r'D:\New folder\serotonin\SEEDED LOGS\run_006_seed_74070_20260408_034723\seed_vs_target_fc.csv'
 )
 DEFAULT_FIVE_HT_TARGET_CSV = Path(
     r'C:\Users\GlenA\Downloads\MB_5HT_acc.left_subgraph_L.csv'
@@ -1413,7 +1421,7 @@ def drive_abs_to_balloon_input(
 FAILURE_PENALTY = 1e9
 CHECKPOINT_FILENAME = 'cmaes_state.pkl'
 CHECKPOINT_EVAL_INTERVAL = 10
-DEFAULT_LOG_DIR = 'cmaes_logs_difference_vectors'
+DEFAULT_LOG_DIR = 'Difference Vector RUN'
 _REFERENCE_NEURAL_UNITS = {
     'I_background_e': brian2.pA,
     'I_background_i': brian2.pA,

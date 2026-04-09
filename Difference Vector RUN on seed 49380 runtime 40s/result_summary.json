@@ -1,0 +1,61 @@
+{
+  "best_fitness": 0.6055644483738389,
+  "best_vector": [
+    0.08501884231363928,
+    25.806089189863926,
+    2.0983300087634733,
+    349.3835936465475,
+    291.1691418262078,
+    427.15749039848095,
+    -135.80002295957019,
+    -23.355212243032728,
+    -102.3866867323833
+  ],
+  "best_free_params": {
+    "seed_a_e": 0.08501884231363928,
+    "seed_b_e": 25.806089189863926,
+    "seed_d_e": 2.0983300087634733,
+    "seed_c_I_sst": 349.3835936465475,
+    "seed_c_I_vip": 291.1691418262078,
+    "seed_c_I_pv": 427.15749039848095,
+    "seed_r_0_sst": -135.80002295957019,
+    "seed_r_0_vip": -23.355212243032728,
+    "seed_r_0_pv": -102.3866867323833
+  },
+  "best_params": {
+    "I_background_e": 352.8275679791917,
+    "I_background_i": 375.8001813299827,
+    "I_background_dend": 57.3813719412165,
+    "mu_ee": 5.971404406896073,
+    "mu_ie": 5.326949030168116,
+    "e_grad_min": 0.20186132703462384
+  },
+  "best_bold_params": {
+    "balloon_kappa": 1.8813684765391485,
+    "balloon_gamma": 0.9448469294245909,
+    "balloon_tau": 1.6140854471050117
+  },
+  "stop_reasons": {
+    "maxfevals": 1300
+  },
+  "generations_completed": 109,
+  "best_difference_vector_r": 0.3944355516261611,
+  "best_difference_vector_fitness": 0.6055644483738389,
+  "reevaluated_fitness": 0.6055644483738389,
+  "reevaluated_difference_vector_r": 0.3944355516261611,
+  "reevaluated_difference_vector_fitness": 0.6055644483738389,
+  "final_evaluation_seed": 49380,
+  "initialised_from_summary": null,
+  "initialised_from_checkpoint": null,
+  "reference_summary": "D:\\New folder\\serotonin\\SEEDED LOGS\\run_004_seed_49380_20260408_023023\\result_summary.json",
+  "reference_seed_vs_target_csv": "D:\\New folder\\serotonin\\SEEDED LOGS\\run_004_seed_49380_20260408_023023\\seed_vs_target_fc.csv",
+  "exported_files": {
+    "best_free_neural_params_npy": "Difference Vector RUN on seed 37035 runtime 40s\\best_free_neural_params_final.npy",
+    "cmaes_state_pickle": "Difference Vector RUN on seed 37035 runtime 40s\\cmaes_state.pkl",
+    "model_5ht_seed_fc_csv": "Difference Vector RUN on seed 37035 runtime 40s\\model_5ht_seed_fc.csv",
+    "target_5ht_fc_csv": "Difference Vector RUN on seed 37035 runtime 40s\\target_5ht_fc.csv",
+    "model_vs_5ht_target_fc_csv": "Difference Vector RUN on seed 37035 runtime 40s\\model_vs_5ht_target_fc.csv",
+    "difference_vectors_csv": "Difference Vector RUN on seed 37035 runtime 40s\\difference_vectors.csv",
+    "best_area_drive_abs_pA_npy": "Difference Vector RUN on seed 37035 runtime 40s\\best_area_drive_abs_pA.npy"
+  }
+}

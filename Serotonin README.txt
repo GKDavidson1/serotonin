@@ -65,3 +65,17 @@ At egradmin: 0.235
 
 
 
+When optimising for 5HT case options:
+	
+	1) Try to fit to 5HT target data
+	
+	2) Create a difference vector based on the changes from NS->5HT
+		-Fit to effects
+		-Fit correlation 
+
+
+
+
+
+
+
