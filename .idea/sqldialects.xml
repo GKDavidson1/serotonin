@@ -5,6 +5,16 @@
     <file url="file://$PROJECT_DIR$/Difference Vector RUN on seed 37035 runtime 40s/default_params.pck" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/Difference Vector RUN on seed 49380 runtime 40s/default_params.pck" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/Difference Vector RUN on seed 61725/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_001_seed_12345_20260408_003506/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_002_seed_24690_20260408_011332/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_003_seed_37035_20260408_015156/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_004_seed_49380_20260408_023023/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_005_seed_61725_20260408_030856/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_006_seed_74070_20260408_034723/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_007_seed_86415_20260408_042555/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_008_seed_98760_20260408_050418/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_009_seed_111105_20260408_102120/default_params.pck" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/SEEDED LOGS runtime 40seconds/run_010_seed_123450_20260408_110555/default_params.pck" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x1/default_params.pck" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x10/default_params.pck" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/SEROTONIN LOGS/cmaes_logs seed 12345x2/default_params.pck" dialect="GenericSQL" />

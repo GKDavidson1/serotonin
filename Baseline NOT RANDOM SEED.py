@@ -26,8 +26,8 @@ except ImportError:  # pragma: no cover - handled when optimisation is invoked
 _ANATOMY_CACHE = None
 _FC_TARGET_CACHE = {}
 DEFAULT_GLOBAL_SEED = 12345*10
-DEFAULT_BATCH_RUNS = 10
-DEFAULT_SEEDED_LOG_ROOT = Path('SEEDED LOGS')
+DEFAULT_BATCH_RUNS = 1
+DEFAULT_SEEDED_LOG_ROOT = Path('SEEDED LOGS Test')
 
 
 PARAMS = {
@@ -170,7 +170,8 @@ PARAMS = {
           'std_noise': 4 * brian2.pA,
           # 'std_noise': 0.0 * brian2.pA,
 
-          'trial_length': 40 * brian2.second,
+          # 'trial_length': 40 * brian2.second,
+          'trial_length': 15 * brian2.second,
         # Long-range connectivity strengths
         #   'mu_ee': 1.45, #default
             'mu_ee': 1.46,
@@ -2172,7 +2173,7 @@ def run_cmaes(
     requested_ftarget = ftarget
     default_sigma0 = 20.0
     default_popsize = 12
-    default_maxfevals = 600
+    default_maxfevals = 2000
 
     start_summary = None
     resume_payload = None
