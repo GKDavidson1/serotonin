@@ -1449,15 +1449,15 @@ SEED_LOCALISED_CURRENT_TO_FREQUENCY_PARAMS = {
 # or
 #   (name, lower, upper, unit_or_None, sigma, initial_value)
 PARAMETER_SPACE = [
-    ('seed_a_e',0.01,0.9,brian2.Hz / brian2.pA, 0.001),
-    ('seed_b_e',1.0,500,brian2.Hz,0.5),
-    ('seed_d_e',0.01,3.0,brian2.second,0.01),
-    ('seed_c_I_sst', 5.0, 500, brian2.Hz / brian2.nA, 0.5),
-    ('seed_c_I_vip', 5.0, 500, brian2.Hz / brian2.nA, 0.5),
-    ('seed_c_I_pv',10.0,800,brian2.Hz / brian2.nA, 0.75),
-    ('seed_r_0_sst',-300,0,brian2.Hz,0.2),
-    ('seed_r_0_vip',-300,0,brian2.Hz,0.2),
-    ('seed_r_0_pv',-700,0,brian2.Hz,0.3),
+    ('seed_a_e',0.05,0.5,brian2.Hz / brian2.pA, 0.00045),
+    ('seed_b_e',20.0,250,brian2.Hz,0.23),
+    ('seed_d_e',0.1,1.2,brian2.second,0.0011),
+    ('seed_c_I_sst', 40, 460, brian2.Hz / brian2.nA, 0.42),
+    ('seed_c_I_vip', 40, 460, brian2.Hz / brian2.nA, 0.42),
+    ('seed_c_I_pv',100,800,brian2.Hz / brian2.nA, 0.7),
+    ('seed_r_0_sst',-140,-10,brian2.Hz,0.13),
+    ('seed_r_0_vip',-140,-10,brian2.Hz,0.13),
+    ('seed_r_0_pv',-400,-30,brian2.Hz,0.37),
 ]
 
 FITNESS_CONFIG = {
@@ -1481,7 +1481,7 @@ FITNESS_CONFIG = {
     'seed_area': None,
     'seed_areas': None,
     'seed_indices': None,
-    'fc_distance': 'difference_vector_pearson',
+    'fc_distance': 'difference_vector_cosine',
     'fc_trim_seconds': 2.0,
     'fc_balloon_dt': 100 * brian2.ms,
     'fc_drive_gain': 1.0,
@@ -2231,6 +2231,25 @@ def _align_vector_by_area(source_area_names, source_values, area_names, *, label
     return np.array([value_by_area[area_name] for area_name in area_names], dtype=float)
 
 
+def _cosine_similarity_from_valid_fc(model_fc_z, target_fc_z, valid_mask):
+    valid_mask = np.asarray(valid_mask, dtype=bool)
+    if not np.any(valid_mask):
+        return np.nan
+
+    model_fc_z = np.asarray(model_fc_z, dtype=float)[valid_mask]
+    target_fc_z = np.asarray(target_fc_z, dtype=float)[valid_mask]
+    if model_fc_z.size < 1:
+        return np.nan
+
+    model_norm = np.linalg.norm(model_fc_z)
+    target_norm = np.linalg.norm(target_fc_z)
+    if model_norm <= 0.0 or target_norm <= 0.0:
+        return np.nan
+
+    cosine_similarity = float(np.dot(model_fc_z, target_fc_z) / (model_norm * target_norm))
+    return cosine_similarity if np.isfinite(cosine_similarity) else np.nan
+
+
 def _pearson_from_valid_fc(model_fc_z, target_fc_z, valid_mask):
     valid_mask = np.asarray(valid_mask, dtype=bool)
     if not np.any(valid_mask):
@@ -2424,10 +2443,14 @@ def summarise_simulation(simulation, fitness_config=None):
     if not np.any(valid_mask):
         return None
 
-    difference_vector_r = _pearson_from_valid_fc(model_change, target_change, valid_mask)
+    difference_vector_cosine = _cosine_similarity_from_valid_fc(
+        model_change,
+        target_change,
+        valid_mask,
+    )
     difference_vector_fitness = (
-        1.0 - difference_vector_r
-        if np.isfinite(difference_vector_r)
+        1.0 - difference_vector_cosine
+        if np.isfinite(difference_vector_cosine)
         else FAILURE_PENALTY
     )
 
@@ -2452,16 +2475,16 @@ def summarise_simulation(simulation, fitness_config=None):
         'fc_target_path': target_spec['path'],
         'reference_fc_path': reference_spec['path'],
         'dt_balloon_s': model_fc['dt_balloon_s'],
-        'pearson_r': (
-            float(difference_vector_r) if np.isfinite(difference_vector_r) else None
+        'cosine_similarity': (
+            float(difference_vector_cosine) if np.isfinite(difference_vector_cosine) else None
         ),
-        'pearson_fitness': (
+        'cosine_fitness': (
             float(difference_vector_fitness)
             if np.isfinite(difference_vector_fitness)
             else float(FAILURE_PENALTY)
         ),
-        'difference_vector_r': (
-            float(difference_vector_r) if np.isfinite(difference_vector_r) else None
+        'difference_vector_cosine': (
+            float(difference_vector_cosine) if np.isfinite(difference_vector_cosine) else None
         ),
         'difference_vector_fitness': (
             float(difference_vector_fitness)
@@ -2485,11 +2508,20 @@ def fitness_from_summary(summary, fitness_config=None):
     model_change = np.asarray(summary['model_change'], dtype=float)[valid_mask]
     target_change = np.asarray(summary['target_change'], dtype=float)[valid_mask]
     diff = model_change - target_change
-    metric = str(config.get('fc_distance', 'difference_vector_pearson')).lower()
-    if metric in ('difference_vector_pearson', 'pearson'):
-        difference_vector_r = summary.get('difference_vector_r')
-        if difference_vector_r is None:
-            difference_vector_r = _pearson_from_valid_fc(
+    metric = str(config.get('fc_distance', 'difference_vector_cosine')).lower()
+    if metric in ('difference_vector_cosine', 'cosine', 'cosine_similarity'):
+        difference_vector_cosine = summary.get('difference_vector_cosine')
+        if difference_vector_cosine is None:
+            difference_vector_cosine = _cosine_similarity_from_valid_fc(
+                summary['model_change'],
+                summary['target_change'],
+                valid_mask,
+            )
+        if not np.isfinite(difference_vector_cosine):
+            return FAILURE_PENALTY
+        fitness = 1.0 - difference_vector_cosine
+    elif metric in ('difference_vector_pearson', 'pearson'):
+        difference_vector_r = _pearson_from_valid_fc(
                 summary['model_change'],
                 summary['target_change'],
                 valid_mask,
@@ -2682,10 +2714,10 @@ def write_final_summary(
     generation,
     fitness_config=None,
     best_fitness_override=None,
-    best_difference_vector_r=None,
+    best_difference_vector_cosine=None,
     best_difference_vector_fitness=None,
     reevaluated_fitness=None,
-    reevaluated_difference_vector_r=None,
+    reevaluated_difference_vector_cosine=None,
     reevaluated_difference_vector_fitness=None,
     final_evaluation_seed=None,
     initialised_from_summary=None,
@@ -2707,8 +2739,8 @@ def write_final_summary(
         'best_bold_params': best_bold_params,
         'stop_reasons': stop_reasons,
         'generations_completed': int(generation),
-        'best_difference_vector_r': (
-            None if best_difference_vector_r is None else float(best_difference_vector_r)
+        'best_difference_vector_cosine': (
+            None if best_difference_vector_cosine is None else float(best_difference_vector_cosine)
         ),
         'best_difference_vector_fitness': (
             None
@@ -2716,10 +2748,10 @@ def write_final_summary(
             else float(best_difference_vector_fitness)
         ),
         'reevaluated_fitness': None if reevaluated_fitness is None else float(reevaluated_fitness),
-        'reevaluated_difference_vector_r': (
+        'reevaluated_difference_vector_cosine': (
             None
-            if reevaluated_difference_vector_r is None
-            else float(reevaluated_difference_vector_r)
+            if reevaluated_difference_vector_cosine is None
+            else float(reevaluated_difference_vector_cosine)
         ),
         'reevaluated_difference_vector_fitness': (
             None
@@ -2763,7 +2795,7 @@ def run_cmaes(
     requested_ftarget = ftarget
     default_sigma0 = 20.0
     default_popsize = 12
-    default_maxfevals = 1300
+    default_maxfevals = 12
 
     start_summary = None
     resume_payload = None
@@ -2894,8 +2926,8 @@ def run_cmaes(
     reevaluated_fitness = float(final_record['fitness'])
     final_simulation = final_record.get('simulation')
     final_summary = final_record.get('summary')
-    reevaluated_difference_vector_r = (
-        None if final_summary is None else final_summary.get('difference_vector_r')
+    reevaluated_difference_vector_cosine = (
+        None if final_summary is None else final_summary.get('difference_vector_cosine')
     )
     reevaluated_difference_vector_fitness = (
         None
@@ -2903,8 +2935,8 @@ def run_cmaes(
         else final_summary.get('difference_vector_fitness')
     )
     observed_summary = None if best_observed_record is None else best_observed_record.get('summary')
-    best_difference_vector_r = (
-        None if observed_summary is None else observed_summary.get('difference_vector_r')
+    best_difference_vector_cosine = (
+        None if observed_summary is None else observed_summary.get('difference_vector_cosine')
     )
     best_difference_vector_fitness = (
         None
@@ -2962,10 +2994,10 @@ def run_cmaes(
         generation=generation,
         fitness_config=effective_fitness_config,
         best_fitness_override=best_fitness,
-        best_difference_vector_r=best_difference_vector_r,
+        best_difference_vector_cosine=best_difference_vector_cosine,
         best_difference_vector_fitness=best_difference_vector_fitness,
         reevaluated_fitness=reevaluated_fitness,
-        reevaluated_difference_vector_r=reevaluated_difference_vector_r,
+        reevaluated_difference_vector_cosine=reevaluated_difference_vector_cosine,
         reevaluated_difference_vector_fitness=reevaluated_difference_vector_fitness,
         final_evaluation_seed=final_evaluation_seed,
         initialised_from_summary=None if start_summary is None else start_summary['path'],
@@ -2975,20 +3007,20 @@ def run_cmaes(
 
     print("Stop reasons:", es.stop())
     print("Best fitness:", best_fitness)
-    if best_difference_vector_r is not None:
-        print("Best difference-vector correlation:", float(best_difference_vector_r))
+    if best_difference_vector_cosine is not None:
+        print("Best difference-vector cosine similarity:", float(best_difference_vector_cosine))
         print(
-            "Best difference-vector fitness (1-r):",
+            "Best difference-vector fitness (1-cosine):",
             float(best_difference_vector_fitness),
         )
     print("Reevaluated fitness:", reevaluated_fitness)
-    if reevaluated_difference_vector_r is not None:
+    if reevaluated_difference_vector_cosine is not None:
         print(
-            "Reevaluated difference-vector correlation:",
-            float(reevaluated_difference_vector_r),
+            "Reevaluated difference-vector cosine similarity:",
+            float(reevaluated_difference_vector_cosine),
         )
         print(
-            "Reevaluated difference-vector fitness (1-r):",
+            "Reevaluated difference-vector fitness (1-cosine):",
             float(reevaluated_difference_vector_fitness),
         )
     print("Best free neural parameters:", best_free_neural_params)
@@ -3003,13 +3035,13 @@ def parse_args():
     )
     # Command-line usage:
     #   Fresh run with built-in defaults:
-    #     py -3 "Baseline Difference Vectors Batched.py"
+    #     py -3 "Baseline Difference Vectors Batched COSINE.py"
     #   Fresh run with explicit overrides:
-    #     py -3 "Baseline Difference Vectors Batched.py" --popsize 24 --maxfevals 1200 --log-dir "cmaes_logs/run_01"
+    #     py -3 "Baseline Difference Vectors Batched COSINE.py" --popsize 24 --maxfevals 1200 --log-dir "cmaes_logs/run_01"
     #   Warm-start the free-parameter CMA-ES from a previous result summary:
-    #     py -3 "Baseline Difference Vectors Batched.py" --start-from-summary "cmaes_logs/run_01/result_summary.json"
+    #     py -3 "Baseline Difference Vectors Batched COSINE.py" --start-from-summary "cmaes_logs/run_01/result_summary.json"
     #   Resume an interrupted CMA-ES run from a saved optimiser checkpoint:
-    #     py -3 "Baseline Difference Vectors Batched.py" --resume-state "cmaes_logs/run_01/cmaes_state.pkl" --maxfevals 1200
+    #     py -3 "Baseline Difference Vectors Batched COSINE.py" --resume-state "cmaes_logs/run_01/cmaes_state.pkl" --maxfevals 1200
     parser.add_argument('--sigma0', type=float, default=None)
     parser.add_argument('--popsize', type=int, default=None)
     parser.add_argument('--maxfevals', type=int, default=None)
@@ -3030,7 +3062,7 @@ def parse_args():
     parser.add_argument('--seed-idx', type=int, default=None)
     parser.add_argument(
         '--fc-distance',
-        choices=('difference_vector_pearson', 'pearson', 'mse', 'rmse', 'mae', 'l2'),
+        choices=('difference_vector_cosine', 'cosine', 'difference_vector_pearson', 'pearson', 'mse', 'rmse', 'mae', 'l2'),
         default=None,
     )
     parser.add_argument('--simulation-seed', type=int, default=None)
@@ -3137,14 +3169,14 @@ def main():
 
 if __name__ == '__main__':
     # Command-line usage from PowerShell / cmd:
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py"
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --single-reference
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --popsize 24 --maxfevals 1200 --workers 8
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --log-dir "cmaes_logs\run_01"
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --resume-state "cmaes_logs\run_01\cmaes_state.pkl" --maxfevals 1200
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --start-from-summary "cmaes_logs\run_01\result_summary.json"
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --reference-run-root "D:\New folder\serotonin\SEEDED LOGS runtime 40seconds"
-    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched.py" --reference-run-dir "D:\New folder\serotonin\SEEDED LOGS runtime 40seconds\run_001_seed_12345_20260408_003506" "D:\New folder\serotonin\SEEDED LOGS runtime 40seconds\run_002_seed_24690_20260408_011332"
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py"
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --single-reference
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --popsize 24 --maxfevals 1200 --workers 8
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --log-dir "cmaes_logs\run_01"
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --resume-state "cmaes_logs\run_01\cmaes_state.pkl" --maxfevals 1200
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --start-from-summary "cmaes_logs\run_01\result_summary.json"
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --reference-run-root "D:\New folder\serotonin\SEEDED LOGS runtime 40seconds"
+    #   py -3 "D:\New folder\serotonin\Baseline Difference Vectors Batched COSINE.py" --reference-run-dir "D:\New folder\serotonin\SEEDED LOGS runtime 40seconds\run_001_seed_12345_20260408_003506" "D:\New folder\serotonin\SEEDED LOGS runtime 40seconds\run_002_seed_24690_20260408_011332"
     #
     # Optional CLI flags:
     #   --sigma0 FLOAT              Global CMA-ES step size used when creating a fresh run.
@@ -3167,7 +3199,7 @@ if __name__ == '__main__':
     #   --target-column NAME        Column name to read from --target-csv.
     #   --seed-area NAME            Single model area to use as the FC seed.
     #   --seed-idx INT              Single model area index to use as the FC seed.
-    #   --fc-distance {difference_vector_pearson,pearson,mse,rmse,mae,l2}
+    #   --fc-distance {difference_vector_cosine,cosine,difference_vector_pearson,pearson,mse,rmse,mae,l2}
     #                               Fitness metric applied to the baseline-vs-5HT residual vectors.
     #   --simulation-seed INT       Simulation RNG seed override. By default this is read from --reference-summary final_evaluation_seed.
     main()
