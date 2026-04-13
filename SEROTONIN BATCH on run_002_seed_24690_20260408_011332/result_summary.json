@@ -1,0 +1,61 @@
+{
+  "best_fitness": 0.5137527220923849,
+  "best_vector": [
+    0.09885800995662591,
+    107.44890183726528,
+    0.10330676539145241,
+    281.94849418292245,
+    131.67286034082883,
+    187.2629532516494,
+    -109.83987336287272,
+    -26.664888236664705,
+    -215.87408764921304
+  ],
+  "best_free_params": {
+    "seed_a_e": 0.09885800995662591,
+    "seed_b_e": 107.44890183726528,
+    "seed_d_e": 0.10330676539145241,
+    "seed_c_I_sst": 281.94849418292245,
+    "seed_c_I_vip": 131.67286034082883,
+    "seed_c_I_pv": 187.2629532516494,
+    "seed_r_0_sst": -109.83987336287272,
+    "seed_r_0_vip": -26.664888236664705,
+    "seed_r_0_pv": -215.87408764921304
+  },
+  "best_params": {
+    "I_background_e": 418.25670506356596,
+    "I_background_i": 330.0387098744568,
+    "I_background_dend": 32.47836011958004,
+    "mu_ee": 0.5182280847339835,
+    "mu_ie": 5.994963250260545,
+    "e_grad_min": 0.4494572592774458
+  },
+  "best_bold_params": {
+    "balloon_kappa": 0.10056764869973893,
+    "balloon_gamma": 0.2109734158911068,
+    "balloon_tau": 2.4971317426222392
+  },
+  "stop_reasons": {
+    "maxfevals": 1300
+  },
+  "generations_completed": 109,
+  "best_difference_vector_cosine": 0.4862472779076151,
+  "best_difference_vector_fitness": 0.5137527220923849,
+  "reevaluated_fitness": 0.5137527220923849,
+  "reevaluated_difference_vector_cosine": 0.4862472779076151,
+  "reevaluated_difference_vector_fitness": 0.5137527220923849,
+  "final_evaluation_seed": 24690,
+  "initialised_from_summary": null,
+  "initialised_from_checkpoint": null,
+  "reference_summary": "D:\\New folder\\serotonin\\SEEDED LOGS runtime Batch\\run_002_seed_24690_20260408_011332\\result_summary.json",
+  "reference_seed_vs_target_csv": "D:\\New folder\\serotonin\\SEEDED LOGS runtime Batch\\run_002_seed_24690_20260408_011332\\seed_vs_target_fc.csv",
+  "exported_files": {
+    "best_free_neural_params_npy": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\best_free_neural_params_final.npy",
+    "cmaes_state_pickle": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\cmaes_state.pkl",
+    "model_5ht_seed_fc_csv": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\model_5ht_seed_fc.csv",
+    "target_5ht_fc_csv": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\target_5ht_fc.csv",
+    "model_vs_5ht_target_fc_csv": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\model_vs_5ht_target_fc.csv",
+    "difference_vectors_csv": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\difference_vectors.csv",
+    "best_area_drive_abs_pA_npy": "SEROTONIN BATCH on run_002_seed_24690_20260408_011332\\best_area_drive_abs_pA.npy"
+  }
+}

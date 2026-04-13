@@ -2795,7 +2795,7 @@ def run_cmaes(
     requested_ftarget = ftarget
     default_sigma0 = 20.0
     default_popsize = 12
-    default_maxfevals = 12
+    default_maxfevals = 1300
 
     start_summary = None
     resume_payload = None
