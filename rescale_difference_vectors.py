@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 # Edit these in the IDE before running if you want a different search root or filename.
-SEARCH_ROOT = Path(r"D:\New folder\serotonin\Model RUNS\Difference Vector Runs")
+SEARCH_ROOT = Path(r"D:\New folder\serotonin\Model RUNS\Cosine Difference Runs")
 TARGET_FILENAME = "difference_vectors.csv"
 OUTPUT_ROOT = SEARCH_ROOT / "rescaled_difference_vectors"
 ZERO_TOLERANCE = 1e-12

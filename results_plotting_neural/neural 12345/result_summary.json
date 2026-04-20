@@ -1,0 +1,48 @@
+{
+  "best_fitness": 0.28759319149035645,
+  "best_vector": [
+    249.94437269321514,
+    282.06339872878465,
+    39.27940319120067,
+    1.2173284156209905,
+    3.4961092224547263,
+    0.11255193689562772,
+    0.10129461608619818,
+    0.11661963035484588,
+    1.5778363102433024
+  ],
+  "best_params": {
+    "I_background_e": 249.94437269321514,
+    "I_background_i": 282.06339872878465,
+    "I_background_dend": 39.27940319120067,
+    "mu_ee": 1.2173284156209905,
+    "mu_ie": 3.4961092224547263,
+    "e_grad_min": 0.11255193689562772
+  },
+  "best_bold_params": {
+    "balloon_kappa": 0.10129461608619818,
+    "balloon_gamma": 0.11661963035484588,
+    "balloon_tau": 1.5778363102433024
+  },
+  "stop_reasons": {
+    "maxfevals": 600
+  },
+  "generations_completed": 51,
+  "best_pearson_r": 0.7124068085096436,
+  "best_pearson_fitness": 0.28759319149035645,
+  "reevaluated_fitness": 0.28759319149035645,
+  "reevaluated_pearson_r": 0.7124068085096436,
+  "reevaluated_pearson_fitness": 0.28759319149035645,
+  "final_evaluation_seed": 12345,
+  "initialised_from_summary": null,
+  "initialised_from_checkpoint": null,
+  "exported_files": {
+    "best_bold_params_json": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\best_bold_params_final.json",
+    "best_neural_params_npy": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\best_neural_params_final.npy",
+    "cmaes_state_pickle": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\cmaes_state.pkl",
+    "seed_fc_csv": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\seed_fc.csv",
+    "target_fc_csv": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\target_fc.csv",
+    "seed_vs_target_fc_csv": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\seed_vs_target_fc.csv",
+    "best_area_drive_abs_pA_npy": "SEEDED LOGS\\run_001_seed_12345_20260408_003506\\best_area_drive_abs_pA.npy"
+  }
+}
