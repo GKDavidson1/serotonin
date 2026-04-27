@@ -8,12 +8,12 @@ import pandas as pd
 
 
 # Edit these values before running the script.
-CSV_FILE = Path(r"D:\New folder\serotonin\Model RUNS\rescaled_difference_vectors\vector_normalized\SEROTONIN BATCH on run_001_seed_12345_20260408_003506\difference_vectors_vector_normalized.csv")
+CSV_FILE = Path(r"C:\Users\GlenA\Documents\GitHub\serotonin\Model RUNS\rescaled_difference_vectors\vector_normalized\SEROTONIN BATCH on run_009_seed_111105_20260408_102120\difference_vectors_vector_normalized.csv")
 LABEL_COLUMN = "area_name"
 VALUE_COLUMNS = ["model_change_vector_normalized", "target_change_vector_normalized"]
 VALID_COLUMN = "valid"
 FILTER_VALID_ONLY = True
-OUTPUT_FILE: Path | None = None
+OUTPUT_FILE: Path | None = CSV_FILE.with_name("radar.png")
 CHART_TITLE: str | None = None
 CSV_ENCODING = "utf-8-sig"
 CSV_DELIMITER = ","
